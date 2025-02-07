@@ -11,13 +11,13 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 # ------------------------
 # 定数／設定
 # ------------------------
-# APIキーは .streamlit/secrets.toml に記述してください（例：[general] api_key = "YOUR_GEMINI_API_KEY"）
+# APIキーは .streamlit/secrets.toml に設定してください（例：[general] api_key = "YOUR_GEMINI_API_KEY"）
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
-# ユーザーの名前入力（上部）
+# ユーザーの名前入力（画面上部）
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", "ユーザー", key="user_name")
 
@@ -87,8 +87,9 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
-    # ユーザーの名前を反映してプロンプト作成
-    prompt = f"【{user_name}さんの質問】\n{question}\n\n"
+    # ユーザー名を反映してプロンプト作成
+    current_user = st.session_state.get("user_name", "ユーザー")
+    prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
     prompt += (
@@ -106,7 +107,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
         "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
-        "出力形式は以下の通りです:\n"
+        "出力形式は以下:\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
@@ -144,3 +145,103 @@ def display_line_style(text: str):
         else:
             name = ""
             message = line
+        styles = color_map.get(name, {"bg": "#F5F5F5", "color": "#000"})
+        bg_color = styles["bg"]
+        text_color = styles["color"]
+        bubble_html = f"""
+        <div style="
+            background-color: {bg_color} !important;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 8px;
+            margin: 5px 0;
+            color: {text_color} !important;
+            font-family: Arial, sans-serif !important;
+        ">
+            <strong>{name}</strong><br>
+            {message}
+        </div>
+        """
+        st.markdown(bubble_html, unsafe_allow_html=True)
+
+def display_grouped_conversation(text: str):
+    """
+    会話テキストを各キャラクターごとにグループ化し、3列で表示します。
+    各吹き出しは、キャラクターごとに指定された背景色、文字色、フォントで表示されます。
+    """
+    groups = {"ゆかり": [], "しんや": [], "みのる": []}
+    lines = text.split("\n")
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        match = re.match(r"^(ゆかり|しんや|みのる):\s*(.*)$", line)
+        if match:
+            name = match.group(1)
+            message = match.group(2)
+            groups[name].append(message)
+    cols = st.columns(3)
+    color_map = {
+        "ゆかり": {"bg": "#FFD1DC", "color": "#000"},
+        "しんや": {"bg": "#D1E8FF", "color": "#000"},
+        "みのる": {"bg": "#D1FFD1", "color": "#000"}
+    }
+    for i, name in enumerate(["ゆかり", "しんや", "みのる"]):
+        with cols[i]:
+            st.markdown(f"### {name}")
+            for msg in groups[name]:
+                bubble_html = f"""
+                <div style="
+                    background-color: {color_map[name]['bg']} !important;
+                    border: 1px solid #ddd;
+                    border-radius: 10px;
+                    padding: 8px;
+                    margin: 5px 0;
+                    color: {color_map[name]['color']} !important;
+                    font-family: Arial, sans-serif !important;
+                ">
+                    {msg}
+                </div>
+                """
+                st.markdown(bubble_html, unsafe_allow_html=True)
+
+# ------------------------
+# Streamlit アプリ本体
+# ------------------------
+
+st.title("ぼくのともだち - 自然な会話 (複数ターン)")
+
+# --- 上部：会話履歴表示エリア ---
+st.header("会話履歴")
+discussion_container = st.empty()
+
+# --- 下部：ユーザー入力エリア ---
+st.header("メッセージ入力")
+with st.form("chat_form", clear_on_submit=True):
+    user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
+    submit_button = st.form_submit_button("送信")
+
+if submit_button:
+    if user_input.strip():
+        if "discussion" not in st.session_state or not st.session_state["discussion"]:
+            # 初回会話生成
+            persona_params = adjust_parameters(user_input)
+            discussion = generate_discussion(user_input, persona_params)
+            st.session_state["discussion"] = discussion
+        else:
+            # 既存の会話に対して続行
+            new_discussion = continue_discussion(user_input, st.session_state["discussion"])
+            st.session_state["discussion"] += "\n" + new_discussion
+        discussion_container.markdown("### 3人の会話")
+        display_grouped_conversation(st.session_state["discussion"])
+    else:
+        st.warning("発言を入力してください。")
+
+st.header("まとめ回答")
+if st.button("会話をまとめる"):
+    if st.session_state.get("discussion", ""):
+        summary = generate_summary(st.session_state["discussion"])
+        st.session_state["summary"] = summary
+        st.markdown("### まとめ回答\n" + "**まとめ:** " + summary)
+    else:
+        st.warning("まずは会話を開始してください。")
