@@ -41,12 +41,13 @@ def analyze_question(question: str) -> int:
 def adjust_parameters(question: str) -> dict:
     score = analyze_question(question)
     params = {}
+    # ゆかりさんの性格を常に明るくはっちゃけたものに固定
+    params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
+    
     if score > 0:
-        params["ゆかり"] = {"style": "情熱的", "detail": "感情に寄り添う回答"}
         params["しんや"] = {"style": "共感的", "detail": "心情を重視した解説"}
         params["みのる"] = {"style": "柔軟", "detail": "状況に合わせた多面的な視点"}
     else:
-        params["ゆかり"] = {"style": "論理的", "detail": "具体的な解説を重視"}
         params["しんや"] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
         params["みのる"] = {"style": "客観的", "detail": "中立的な視点からの考察"}
     return params
@@ -88,7 +89,6 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
-    # ユーザー名をプロンプトに反映（st.session_state["user_name"] もしくは user_name 変数を利用）
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
@@ -169,7 +169,7 @@ def display_line_style(text: str):
 # Streamlit アプリ本体
 # ------------------------
 
-st.title("ぼくのともだち - 自然な会話 (複数ターン)")
+st.title("ぼくのともだち V3.0")
 
 # --- 上部：会話履歴表示エリア ---
 st.header("会話履歴")
