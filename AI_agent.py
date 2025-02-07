@@ -16,7 +16,8 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # ------------------------
 # 定数／設定
 # ------------------------
-# APIキーは .streamlit/secrets.toml に設定してください
+# APIキーは .streamlit/secrets.toml に記述してください
+# 例: [general] api_key = "YOUR_GEMINI_API_KEY"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
@@ -40,9 +41,8 @@ def analyze_question(question: str) -> int:
 def adjust_parameters(question: str) -> dict:
     score = analyze_question(question)
     params = {}
-    # ゆかりさんは固定で明るくはっちゃけた性格
+    # ゆかりさんは常に明るくはっちゃけた性格に固定
     params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
-    
     if score > 0:
         params["しんや"] = {"style": "共感的", "detail": "心情を重視した解説"}
         params["みのる"] = {"style": "柔軟", "detail": "状況に合わせた多面的な視点"}
@@ -103,11 +103,11 @@ def generate_discussion(question: str, persona_params: dict) -> str:
     return call_gemini_api(prompt)
 
 def continue_discussion(additional_input: str, current_discussion: str) -> str:
-    # 修正：これまでの会話を踏まえ、前回の流れに沿った会話のリレーを強調
     prompt = (
-        "以下はこれまでの会話の全体の流れです：\n" + current_discussion + "\n\n" +
-        "この流れに沿い、ユーザーの追加発言「" + additional_input + "」に対して、3人が自然な会話のリレーをしてください。\n"
-        "出力形式は以下の通りです：\n"
+        "これまでの会話:\n" + current_discussion + "\n\n" +
+        "ユーザーの追加発言: " + additional_input + "\n\n" +
+        "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
+        "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
@@ -117,7 +117,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 
 def generate_summary(discussion: str) -> str:
     prompt = (
-        "以下は3人の会話内容です：\n" + discussion + "\n\n" +
+        "以下は3人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
@@ -164,46 +164,6 @@ def display_line_style(text: str):
         """
         st.markdown(bubble_html, unsafe_allow_html=True)
 
-def display_grouped_conversation(text: str):
-    """
-    （参考用）会話テキストを各キャラクターごとにグループ化し、3列で表示します。
-    """
-    groups = {"ゆかり": [], "しんや": [], "みのる": []}
-    lines = text.split("\n")
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^(ゆかり|しんや|みのる):\s*(.*)$", line)
-        if match:
-            name = match.group(1)
-            message = match.group(2)
-            groups[name].append(message)
-    cols = st.columns(3)
-    color_map = {
-        "ゆかり": {"bg": "#FFD1DC", "color": "#000"},
-        "しんや": {"bg": "#D1E8FF", "color": "#000"},
-        "みのる": {"bg": "#D1FFD1", "color": "#000"}
-    }
-    for i, name in enumerate(["ゆかり", "しんや", "みのる"]):
-        with cols[i]:
-            st.markdown(f"### {name}")
-            for msg in groups[name]:
-                bubble_html = f"""
-                <div style="
-                    background-color: {color_map[name]['bg']} !important;
-                    border: 1px solid #ddd;
-                    border-radius: 10px;
-                    padding: 8px;
-                    margin: 5px 0;
-                    color: {color_map[name]['color']} !important;
-                    font-family: Arial, sans-serif !important;
-                ">
-                    {msg}
-                </div>
-                """
-                st.markdown(bubble_html, unsafe_allow_html=True)
-
 # ------------------------
 # Streamlit アプリ本体
 # ------------------------
@@ -223,16 +183,14 @@ with st.form("chat_form", clear_on_submit=True):
 if submit_button:
     if user_input.strip():
         if "discussion" not in st.session_state or not st.session_state["discussion"]:
-            # 初回会話生成
             persona_params = adjust_parameters(user_input)
             discussion = generate_discussion(user_input, persona_params)
             st.session_state["discussion"] = discussion
         else:
-            # 既存の会話に対して続行
             new_discussion = continue_discussion(user_input, st.session_state["discussion"])
             st.session_state["discussion"] += "\n" + new_discussion
         discussion_container.markdown("### 3人の会話")
-        display_grouped_conversation(st.session_state["discussion"])
+        display_line_style(st.session_state["discussion"])
     else:
         st.warning("発言を入力してください。")
 
