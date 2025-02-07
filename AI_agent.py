@@ -16,7 +16,8 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # ------------------------
 # 定数／設定
 # ------------------------
-# APIキーは .streamlit/secrets.toml に記述してください（例：[general] api_key = "YOUR_GEMINI_API_KEY"）
+# APIキーは .streamlit/secrets.toml に設定してください
+# 例: [general] api_key = "YOUR_GEMINI_API_KEY"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
@@ -87,7 +88,7 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
-    # ユーザーの名前をプロンプトに反映
+    # ユーザー名をプロンプトに反映（st.session_state["user_name"] もしくは user_name 変数を利用）
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
@@ -107,7 +108,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
         "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
-        "出力形式は以下:\n"
+        "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
@@ -164,51 +165,11 @@ def display_line_style(text: str):
         """
         st.markdown(bubble_html, unsafe_allow_html=True)
 
-def display_grouped_conversation(text: str):
-    """
-    会話テキストを各キャラクターごとにグループ化し、3列で表示します。
-    """
-    groups = {"ゆかり": [], "しんや": [], "みのる": []}
-    lines = text.split("\n")
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        match = re.match(r"^(ゆかり|しんや|みのる):\s*(.*)$", line)
-        if match:
-            name = match.group(1)
-            message = match.group(2)
-            groups[name].append(message)
-    cols = st.columns(3)
-    color_map = {
-        "ゆかり": {"bg": "#FFD1DC", "color": "#000"},
-        "しんや": {"bg": "#D1E8FF", "color": "#000"},
-        "みのる": {"bg": "#D1FFD1", "color": "#000"}
-    }
-    for i, name in enumerate(["ゆかり", "しんや", "みのる"]):
-        with cols[i]:
-            st.markdown(f"### {name}")
-            for msg in groups[name]:
-                bubble_html = f"""
-                <div style="
-                    background-color: {color_map[name]['bg']} !important;
-                    border: 1px solid #ddd;
-                    border-radius: 10px;
-                    padding: 8px;
-                    margin: 5px 0;
-                    color: {color_map[name]['color']} !important;
-                    font-family: Arial, sans-serif !important;
-                ">
-                    {msg}
-                </div>
-                """
-                st.markdown(bubble_html, unsafe_allow_html=True)
-
 # ------------------------
 # Streamlit アプリ本体
 # ------------------------
 
-st.title("ぼくのともだち V3.0")
+st.title("ぼくのともだち - 自然な会話 (複数ターン)")
 
 # --- 上部：会話履歴表示エリア ---
 st.header("会話履歴")
@@ -223,14 +184,16 @@ with st.form("chat_form", clear_on_submit=True):
 if submit_button:
     if user_input.strip():
         if "discussion" not in st.session_state or not st.session_state["discussion"]:
+            # 初回会話生成
             persona_params = adjust_parameters(user_input)
             discussion = generate_discussion(user_input, persona_params)
             st.session_state["discussion"] = discussion
         else:
+            # 既存の会話に対して続行
             new_discussion = continue_discussion(user_input, st.session_state["discussion"])
             st.session_state["discussion"] += "\n" + new_discussion
         discussion_container.markdown("### 3人の会話")
-        display_grouped_conversation(st.session_state["discussion"])
+        display_line_style(st.session_state["discussion"])
     else:
         st.warning("発言を入力してください。")
 
