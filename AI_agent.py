@@ -1,62 +1,31 @@
 import streamlit as st
 import requests
 import re
+import random
 
 # ------------------------
-# ページ設定
+# ページ設定（最初に実行）
 # ------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 
 # ------------------------
-# カスタムCSS（会話コンテナと固定フッターのスタイル）
-# ------------------------
-st.markdown(
-    """
-    <style>
-    /* 会話コンテナ：上下に余白を作る */
-    .conversation-container {
-        margin-top: 20px;
-        margin-bottom: 120px;  /* 固定フッター分の余白を確保 */
-    }
-    /* 会話ウィンドウ（スクロール可能） */
-    .conversation {
-        height: calc(100vh - 160px);  /* ビューポート高さ - (上部20px + 下部固定領域約140px) */
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 10px;
-    }
-    /* 固定フッター（入力エリア） */
-    .fixed-footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: #fff;
-        border-top: 1px solid #ddd;
-        padding: 10px;
-        z-index: 100;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ------------------------
-# ユーザー名入力（ページ上部）
+# ユーザーの名前入力（画面上部に表示）
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
 # ------------------------
-# APIキーなどの設定
+# 定数／設定
 # ------------------------
+# APIキーは .streamlit/secrets.toml に記述してください
+# 例: [general] api_key = "YOUR_GEMINI_API_KEY"
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
-# 各種関数定義
+# 関数定義
 # ------------------------
+
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -156,7 +125,8 @@ def generate_summary(discussion: str) -> str:
 
 def display_line_style(text: str):
     """
-    各発言をキャラクターごとのスタイルで吹き出し形式に表示する
+    会話の各行を順番通りに縦に表示します。
+    各吹き出しは、キャラクターごとに指定された背景色、文字色、フォントで表示されます。
     """
     lines = text.split("\n")
     color_map = {
@@ -178,13 +148,13 @@ def display_line_style(text: str):
         styles = color_map.get(name, {"bg": "#F5F5F5", "color": "#000"})
         bubble_html = f"""
         <div style="
-            background-color: {styles['bg']};
+            background-color: {styles['bg']} !important;
             border: 1px solid #ddd;
             border-radius: 10px;
             padding: 8px;
             margin: 5px 0;
-            color: {styles['color']};
-            font-family: Arial, sans-serif;
+            color: {styles['color']} !important;
+            font-family: Arial, sans-serif !important;
         ">
             <strong>{name}</strong><br>
             {message}
@@ -193,43 +163,40 @@ def display_line_style(text: str):
         st.markdown(bubble_html, unsafe_allow_html=True)
 
 # ------------------------
-# セッションステートの初期化
+# Streamlit アプリ本体
 # ------------------------
-if "discussion" not in st.session_state:
-    st.session_state["discussion"] = ""
 
-# ------------------------
-# 会話ウィンドウの表示（上部に固定のコンテナ内で表示）
-# ------------------------
-st.markdown('<div class="conversation-container">', unsafe_allow_html=True)
-st.markdown('<div class="conversation">', unsafe_allow_html=True)
-if st.session_state["discussion"]:
-    display_line_style(st.session_state["discussion"])
-else:
-    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+st.title("ぼくのともだち V2.1")
 
-# ------------------------
-# 固定フッター（入力エリア）の配置（常に画面下部）
-# ------------------------
-st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
+# --- 上部：会話履歴表示エリア ---
+st.header("会話履歴")
+discussion_container = st.empty()
+
+# --- 下部：ユーザー入力エリア ---
+st.header("メッセージ入力")
 with st.form("chat_form", clear_on_submit=True):
     user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
     submit_button = st.form_submit_button("送信")
-st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------------
-# フォーム送信後の処理
-# ------------------------
 if submit_button:
     if user_input.strip():
-        if not st.session_state["discussion"]:
+        if "discussion" not in st.session_state or not st.session_state["discussion"]:
             persona_params = adjust_parameters(user_input)
             discussion = generate_discussion(user_input, persona_params)
             st.session_state["discussion"] = discussion
         else:
             new_discussion = continue_discussion(user_input, st.session_state["discussion"])
             st.session_state["discussion"] += "\n" + new_discussion
+        discussion_container.markdown("### 3人の会話")
+        display_line_style(st.session_state["discussion"])
     else:
         st.warning("発言を入力してください。")
+
+st.header("まとめ回答")
+if st.button("会話をまとめる"):
+    if st.session_state.get("discussion", ""):
+        summary = generate_summary(st.session_state["discussion"])
+        st.session_state["summary"] = summary
+        st.markdown("### まとめ回答\n" + "**まとめ:** " + summary)
+    else:
+        st.warning("まずは会話を開始してください。")
