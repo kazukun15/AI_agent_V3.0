@@ -6,7 +6,7 @@ import random
 # ------------------------
 # ページ設定（最初に実行）
 # ------------------------
-st.set_page_config(page_title="ぼくのともだち", layout="wide")
+st.set_page_config(page_title="ぼくのともだち V2.1", layout="wide")
 
 # ------------------------
 # ユーザーの名前入力（画面上部に表示）
@@ -123,10 +123,9 @@ def generate_summary(discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-def display_line_style(text: str):
+def get_display_html(text: str) -> str:
     """
-    会話の各行を順番通りに縦に表示します。
-    各吹き出しは、キャラクターごとに指定された背景色、文字色、フォントで表示されます。
+    会話の各行をHTML形式の吹き出しで返す関数。
     """
     lines = text.split("\n")
     color_map = {
@@ -134,6 +133,7 @@ def display_line_style(text: str):
         "しんや": {"bg": "#D1E8FF", "color": "#000"},
         "みのる": {"bg": "#D1FFD1", "color": "#000"}
     }
+    html = ""
     for line in lines:
         line = line.strip()
         if not line:
@@ -146,23 +146,22 @@ def display_line_style(text: str):
             name = ""
             message = line
         styles = color_map.get(name, {"bg": "#F5F5F5", "color": "#000"})
-        bg_color = styles["bg"]
-        text_color = styles["color"]
         bubble_html = f"""
         <div style="
-            background-color: {bg_color} !important;
+            background-color: {styles['bg']};
             border: 1px solid #ddd;
             border-radius: 10px;
             padding: 8px;
             margin: 5px 0;
-            color: {text_color} !important;
-            font-family: Arial, sans-serif !important;
+            color: {styles['color']};
+            font-family: Arial, sans-serif;
         ">
             <strong>{name}</strong><br>
             {message}
         </div>
         """
-        st.markdown(bubble_html, unsafe_allow_html=True)
+        html += bubble_html
+    return html
 
 # ------------------------
 # Streamlit アプリ本体
@@ -170,15 +169,15 @@ def display_line_style(text: str):
 
 st.title("ぼくのともだち V2.1")
 
-# --- 上部：会話履歴表示エリア ---
-st.header("会話履歴")
-discussion_container = st.empty()
-
-# --- 下部：ユーザー入力エリア ---
+# --- ユーザー入力エリア：メッセージ入力（上部に配置） ---
 st.header("メッセージ入力")
 with st.form("chat_form", clear_on_submit=True):
     user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
     submit_button = st.form_submit_button("送信")
+
+# --- 会話履歴表示エリア（入力エリアの下に配置） ---
+st.header("会話履歴")
+discussion_container = st.container()
 
 if submit_button:
     if user_input.strip():
@@ -189,8 +188,24 @@ if submit_button:
         else:
             new_discussion = continue_discussion(user_input, st.session_state["discussion"])
             st.session_state["discussion"] += "\n" + new_discussion
-        discussion_container.markdown("### 3人の会話")
-        display_line_style(st.session_state["discussion"])
+        # HTMLとして会話履歴を表示する。新しい発言が下に追加されるようにする。
+        html_content = "<h3>3人の会話</h3>" + get_display_html(st.session_state["discussion"])
+        with discussion_container:
+            st.markdown(
+                f'<div id="discussion-container" style="max-height: 400px; overflow-y: auto;">{html_content}</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                """
+                <script>
+                var container = document.getElementById("discussion-container");
+                if(container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+                </script>
+                """,
+                unsafe_allow_html=True
+            )
     else:
         st.warning("発言を入力してください。")
 
