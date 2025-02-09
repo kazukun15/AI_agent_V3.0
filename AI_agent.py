@@ -125,10 +125,14 @@ def generate_summary(discussion: str) -> str:
 
 def display_line_style(text: str):
     """
-    会話の各行を順番通りに縦に表示します。
-    各吹き出しは、キャラクターごとに指定された背景色、文字色、フォントで表示されます。
+    会話の各行を、キャラクターごとの背景色と文字色で表示します。
+    例:
+      ・ゆかり: 背景色: ピンク (#FFD1DC)、文字色: 黒 (#000)
+      ・しんや: 背景色: 水色 (#D1E8FF)、文字色: 黒 (#000)
+      ・みのる: 背景色: 薄緑 (#D1FFD1)、文字色: 黒 (#000)
     """
     lines = text.split("\n")
+    # 各キャラクターに対する色のマッピング
     color_map = {
         "ゆかり": {"bg": "#FFD1DC", "color": "#000"},
         "しんや": {"bg": "#D1E8FF", "color": "#000"},
@@ -138,6 +142,7 @@ def display_line_style(text: str):
         line = line.strip()
         if not line:
             continue
+        # 行頭にキャラクター名があれば抽出する（例: "ゆかり: 発言内容"）
         matched = re.match(r"^(ゆかり|しんや|みのる):\s*(.*)$", line)
         if matched:
             name = matched.group(1)
