@@ -8,11 +8,24 @@ import re
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 
 # ------------------------
-# カスタムCSS（会話ウィンドウと固定フッターのスタイル）
+# カスタムCSS（会話コンテナと固定フッターのスタイル）
 # ------------------------
 st.markdown(
     """
     <style>
+    /* 会話コンテナ：上下に余白を作る */
+    .conversation-container {
+        margin-top: 20px;
+        margin-bottom: 120px;  /* 固定フッター分の余白を確保 */
+    }
+    /* 会話ウィンドウ（スクロール可能） */
+    .conversation {
+        height: calc(100vh - 160px);  /* ビューポート高さ - (上部20px + 下部固定領域約140px) */
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+    }
     /* 固定フッター（入力エリア） */
     .fixed-footer {
         position: fixed;
@@ -23,15 +36,6 @@ st.markdown(
         border-top: 1px solid #ddd;
         padding: 10px;
         z-index: 100;
-    }
-    /* 会話ウィンドウ（スクロール可能） */
-    .conversation {
-        /* 固定フッター分の高さ（例：入力欄高さ100px＋余白20px）を差し引く */
-        height: calc(100vh - 120px);
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 10px;
     }
     </style>
     """,
@@ -195,13 +199,15 @@ if "discussion" not in st.session_state:
     st.session_state["discussion"] = ""
 
 # ------------------------
-# 会話ウィンドウの表示（常に上部に表示）
+# 会話ウィンドウの表示（上部に固定のコンテナ内で表示）
 # ------------------------
+st.markdown('<div class="conversation-container">', unsafe_allow_html=True)
 st.markdown('<div class="conversation">', unsafe_allow_html=True)
 if st.session_state["discussion"]:
     display_line_style(st.session_state["discussion"])
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------
