@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 
 # ------------------------
-# カスタムCSS（固定フッターと会話ウィンドウのスタイル）
+# カスタムCSS（会話ウィンドウと固定フッターのスタイル）
 # ------------------------
 st.markdown(
     """
@@ -26,10 +26,10 @@ st.markdown(
     }
     /* 会話ウィンドウ（スクロール可能） */
     .conversation {
-        height: calc(100vh - 220px); /* 入力エリア分を差し引く */
+        /* 固定フッター分の高さ（例：入力欄高さ100px＋余白20px）を差し引く */
+        height: calc(100vh - 120px);
         overflow-y: auto;
         padding: 10px;
-        margin-bottom: 10px;
         border: 1px solid #ddd;
         border-radius: 10px;
     }
@@ -195,41 +195,7 @@ if "discussion" not in st.session_state:
     st.session_state["discussion"] = ""
 
 # ------------------------
-# 会話まとめボタン（会話がある場合のみ）
-# ------------------------
-if st.button("会話をまとめる"):
-    if st.session_state["discussion"]:
-        summary = generate_summary(st.session_state["discussion"])
-        st.session_state["summary"] = summary
-        st.markdown("### まとめ回答\n" + "**まとめ:** " + summary)
-    else:
-        st.warning("まずは会話を開始してください。")
-
-# ------------------------
-# 固定フッター（入力エリア）の配置
-# ------------------------
-with st.container():
-    st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
-    with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
-        submit_button = st.form_submit_button("送信")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # フォーム送信後の処理
-    if submit_button:
-        if user_input.strip():
-            if not st.session_state["discussion"]:
-                persona_params = adjust_parameters(user_input)
-                discussion = generate_discussion(user_input, persona_params)
-                st.session_state["discussion"] = discussion
-            else:
-                new_discussion = continue_discussion(user_input, st.session_state["discussion"])
-                st.session_state["discussion"] += "\n" + new_discussion
-        else:
-            st.warning("発言を入力してください。")
-
-# ------------------------
-# 会話ウィンドウの表示（常に表示、会話内容がない場合はプレースホルダー表示）
+# 会話ウィンドウの表示（常に上部に表示）
 # ------------------------
 st.markdown('<div class="conversation">', unsafe_allow_html=True)
 if st.session_state["discussion"]:
@@ -237,3 +203,27 @@ if st.session_state["discussion"]:
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------
+# 固定フッター（入力エリア）の配置（常に画面下部）
+# ------------------------
+st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
+with st.form("chat_form", clear_on_submit=True):
+    user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
+    submit_button = st.form_submit_button("送信")
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------
+# フォーム送信後の処理
+# ------------------------
+if submit_button:
+    if user_input.strip():
+        if not st.session_state["discussion"]:
+            persona_params = adjust_parameters(user_input)
+            discussion = generate_discussion(user_input, persona_params)
+            st.session_state["discussion"] = discussion
+        else:
+            new_discussion = continue_discussion(user_input, st.session_state["discussion"])
+            st.session_state["discussion"] += "\n" + new_discussion
+    else:
+        st.warning("発言を入力してください。")
