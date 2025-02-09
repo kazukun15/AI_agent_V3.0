@@ -216,7 +216,7 @@ with st.container():
         submit_button = st.form_submit_button("送信")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # フォーム送信後の処理（st.experimental_rerun() は削除）
+    # フォーム送信後の処理
     if submit_button:
         if user_input.strip():
             if not st.session_state["discussion"]:
@@ -230,9 +230,9 @@ with st.container():
             st.warning("発言を入力してください。")
 
 # ------------------------
-# 会話ウィンドウの表示
+# 会話ウィンドウの表示（会話内容がある場合のみ）
 # ------------------------
-st.markdown('<div class="conversation">', unsafe_allow_html=True)
 if st.session_state["discussion"]:
+    st.markdown('<div class="conversation">', unsafe_allow_html=True)
     display_line_style(st.session_state["discussion"])
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
