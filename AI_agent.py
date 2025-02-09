@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import re
-import random
+# import random  ← 不要なため削除
 
 # ------------------------
 # ページ設定（最初に実行）
@@ -125,7 +125,7 @@ def generate_summary(discussion: str) -> str:
 
 def get_display_html(text: str) -> str:
     """
-    会話の各行をHTML形式の吹き出しで返す関数。
+    会話の各行をHTML形式の吹き出しとして返す関数。
     """
     lines = text.split("\n")
     color_map = {
@@ -188,7 +188,7 @@ if submit_button:
         else:
             new_discussion = continue_discussion(user_input, st.session_state["discussion"])
             st.session_state["discussion"] += "\n" + new_discussion
-        # HTMLとして会話履歴を表示する。新しい発言が下に追加されるようにする。
+        # HTMLとして会話履歴を表示。新しい発言が下に追加されるようにする。
         html_content = "<h3>3人の会話</h3>" + get_display_html(st.session_state["discussion"])
         with discussion_container:
             st.markdown(
