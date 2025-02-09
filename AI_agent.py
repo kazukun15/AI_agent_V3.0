@@ -53,7 +53,6 @@ NAMES = ["ゆかり", "しんや", "みのる"]
 # ------------------------
 # 各種関数定義
 # ------------------------
-
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -230,9 +229,11 @@ with st.container():
             st.warning("発言を入力してください。")
 
 # ------------------------
-# 会話ウィンドウの表示（会話内容がある場合のみ）
+# 会話ウィンドウの表示（常に表示、会話内容がない場合はプレースホルダー表示）
 # ------------------------
+st.markdown('<div class="conversation">', unsafe_allow_html=True)
 if st.session_state["discussion"]:
-    st.markdown('<div class="conversation">', unsafe_allow_html=True)
     display_line_style(st.session_state["discussion"])
-    st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
