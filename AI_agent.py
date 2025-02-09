@@ -207,18 +207,16 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 固定フッター（入力エリア）のプレースホルダー
+# 固定フッター（入力エリア）の配置
 # ------------------------
-fixed_footer_placeholder = st.empty()
-
-with fixed_footer_placeholder.container():
+with st.container():
     st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
         submit_button = st.form_submit_button("送信")
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # フォーム送信後の処理
+
+    # フォーム送信後の処理（st.experimental_rerun() は削除）
     if submit_button:
         if user_input.strip():
             if not st.session_state["discussion"]:
@@ -228,8 +226,6 @@ with fixed_footer_placeholder.container():
             else:
                 new_discussion = continue_discussion(user_input, st.session_state["discussion"])
                 st.session_state["discussion"] += "\n" + new_discussion
-            # 更新後に再実行して最新状態を反映
-            st.experimental_rerun()
         else:
             st.warning("発言を入力してください。")
 
