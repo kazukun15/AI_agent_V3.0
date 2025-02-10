@@ -4,9 +4,12 @@ import re
 import random
 
 # ------------------------
-# ページ設定（最初に実行）
+# ページ設定
 # ------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
+
+# タイトルの表示
+st.title("ぼくのともだち V2.2")
 
 # ------------------------
 # ユーザーの名前入力（画面上部に表示）
@@ -186,11 +189,16 @@ with st.container():
     st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
-        submit_button = st.form_submit_button("送信")
+        # 2つのボタンを横並びで配置
+        col1, col2 = st.columns(2)
+        with col1:
+            send_button = st.form_submit_button("送信")
+        with col2:
+            continue_button = st.form_submit_button("続きを話す")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # フォーム送信後の処理
-    if submit_button:
+    # 送信ボタンが押された場合の処理
+    if send_button:
         if user_input.strip():
             if not st.session_state["discussion"]:
                 persona_params = adjust_parameters(user_input)
@@ -201,6 +209,15 @@ with st.container():
                 st.session_state["discussion"] += "\n" + new_discussion
         else:
             st.warning("発言を入力してください。")
+    
+    # 続きを話すボタンが押された場合の処理
+    if continue_button:
+        if st.session_state["discussion"]:
+            default_input = "続きをお願いします。"
+            new_discussion = continue_discussion(default_input, st.session_state["discussion"])
+            st.session_state["discussion"] += "\n" + new_discussion
+        else:
+            st.warning("まずは会話を開始してください。")
 
 # ------------------------
 # 会話ウィンドウの表示（常に表示、会話内容がない場合はプレースホルダー表示）
