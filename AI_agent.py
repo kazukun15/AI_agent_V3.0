@@ -20,30 +20,13 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
-# 既存のキャラクター
+MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
-# 新キャラクター生成用関数
+# 関数定義
 # ------------------------
-def generate_new_character() -> tuple:
-    """
-    新キャラクターをランダムで生成する。
-    性格は既存の3人（ゆかり、しんや、みのる）とは全く異なる特徴を持つように設定する。
-    """
-    candidates = [
-        ("たけし", "冷静沈着で皮肉屋、どこか孤高な雰囲気"),
-        ("さとる", "率直で物事を突き詰める、時に辛辣な現実主義者"),
-        ("りさ", "自由奔放で独創的、常識にとらわれない斬新な視点"),
-        ("けんじ", "クールで分析的、冷静かつ合理的な判断力を持つ"),
-        ("なおみ", "柔軟でユーモアにあふれ、独自の哲学を語る")
-    ]
-    return random.choice(candidates)
 
-# ------------------------
-# 関数定義（既存の処理）
-# ------------------------
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -145,58 +128,72 @@ def generate_summary(discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-def display_line_style(text: str):
-    """
-    各発言をキャラクターごとの背景色・文字色と、配置（ユーザーは右寄せ、他は左寄せ）で吹き出し表示する。
-    新しいメッセージが上部に表示されるよう逆順に表示します。
-    """
-    lines = text.split("\n")
-    # 空行を除いて逆順にする（最新メッセージが上）
-    lines = [line.strip() for line in lines if line.strip()]
-    lines = list(reversed(lines))
-    
-    color_map = {
-        "ユーザー": {"bg": "#CCE5FF", "color": "#000", "align": "right"},
-        "ゆかり": {"bg": "#FFD1DC", "color": "#000", "align": "left"},
-        "しんや": {"bg": "#D1E8FF", "color": "#000", "align": "left"},
-        "みのる": {"bg": "#D1FFD1", "color": "#000", "align": "left"}
-    }
-    # 新キャラクターは"新キャラクター"という固定ラベルにする
-    new_character_label = "新キャラクター"
-    for line in lines:
-        matched = re.match(r"^(ゆかり|しんや|みのる|新キャラクター|[^\:]+):\s*(.*)$", line)
-        if matched:
-            sender = matched.group(1)
-            message = matched.group(2)
-        else:
-            sender = ""
-            message = line
-        if sender not in color_map:
-            # 新キャラクターのスタイル（ユーザーとは異なり、左寄せ）
-            style = {"bg": "#FFE4B5", "color": "#000", "align": "left"}
-        else:
-            style = color_map[sender]
-        bubble_html = (
-            f'<div style="background-color: {style["bg"]}; border: 1px solid #ddd; border-radius: 10px; '
-            f'padding: 8px; margin: 5px; color: {style["color"]}; font-family: Arial, sans-serif; '
-            f'text-align: {style["align"]}; max-width: 80%;">'
-            f'<strong>{sender}</strong><br>{message}</div>'
-        )
-        st.markdown(bubble_html, unsafe_allow_html=True)
-
 def generate_new_character() -> tuple:
     """
     ランダムで新キャラクターの名前と性格を生成する。
-    既存のキャラクター（ゆかり、しんや、みのる）とは全く異なる性格に設定します。
+    既存のキャラクター（ゆかり、しんや、みのる）とは全く異なる性格に設定する。
     """
     candidates = [
-        ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
+        ("たけし", "冷静沈着で心優しい。お兄さん的な立ち位置"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
         ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
         ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
         ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
     ]
     return random.choice(candidates)
+
+def display_chat_log(chat_log: list):
+    """
+    chat_log の各メッセージを、LINE風のバブルチャットとして表示する。
+    ユーザーの発言は右寄せ、友達4人の発言は左寄せで、テキストは自動で折り返されます。
+    最新のメッセージが上部に表示されるように逆順にレンダリングします。
+    """
+    style_map = {
+        "ユーザー": {
+            "bg": "#CCE5FF",
+            "color": "#000",
+            "float": "right"
+        },
+        "ゆかり": {
+            "bg": "#FFD1DC",
+            "color": "#000",
+            "float": "left"
+        },
+        "しんや": {
+            "bg": "#D1E8FF",
+            "color": "#000",
+            "float": "left"
+        },
+        "みのる": {
+            "bg": "#D1FFD1",
+            "color": "#000",
+            "float": "left"
+        },
+        "新キャラクター": {
+            "bg": "#FFE4B5",
+            "color": "#000",
+            "float": "left"
+        }
+    }
+    # 最新メッセージが上に表示されるよう逆順に
+    for msg in reversed(chat_log):
+        sender = msg["sender"]
+        message = msg["message"]
+        style = style_map.get(sender, {"bg": "#F5F5F5", "color": "#000", "float": "left"})
+        bubble_style = (
+            f"background-color: {style['bg']}; "
+            "border: 1px solid #ddd; "
+            "border-radius: 10px; "
+            "padding: 8px; "
+            "margin: 5px; "
+            f"color: {style['color']}; "
+            "font-family: Arial, sans-serif; "
+            f"float: {style['float']}; "
+            "max-width: 70%; "
+            "clear: both;"
+        )
+        bubble_html = f'<div style="{bubble_style}"><strong>{sender}</strong><br>{message}</div>'
+        st.markdown(bubble_html, unsafe_allow_html=True)
 
 # ------------------------
 # セッションステートの初期化
@@ -205,11 +202,10 @@ if "chat_log" not in st.session_state:
     st.session_state["chat_log"] = []
 
 # ------------------------
-# 会話まとめボタン（会話がある場合のみ）
+# 会話まとめボタン
 # ------------------------
 if st.button("会話をまとめる"):
     if st.session_state["chat_log"]:
-        # 会話全体を結合してまとめ生成
         all_discussion = "\n".join([f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"]])
         summary = generate_summary(all_discussion)
         st.session_state["summary"] = summary
@@ -234,7 +230,6 @@ with st.container():
     # 送信ボタンの処理
     if send_button:
         if user_input.strip():
-            # ユーザー発言（右寄せ）を記録
             st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
             if len(st.session_state["chat_log"]) == 1:
                 persona_params = adjust_parameters(user_input)
@@ -248,7 +243,7 @@ with st.container():
                         st.session_state["chat_log"].append({"sender": sender, "message": message})
             else:
                 new_discussion = continue_discussion(user_input, "\n".join(
-                    [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"]=="新キャラクター"]
+                    [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"] == "新キャラクター"]
                 ))
                 for line in new_discussion.split("\n"):
                     line = line.strip()
@@ -265,7 +260,7 @@ with st.container():
         if st.session_state["chat_log"]:
             default_input = "続きをお願いします。"
             new_discussion = continue_discussion(default_input, "\n".join(
-                [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"]=="新キャラクター"]
+                [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"] == "新キャラクター"]
             ))
             for line in new_discussion.split("\n"):
                 line = line.strip()
@@ -278,33 +273,10 @@ with st.container():
             st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 会話ウィンドウの表示（常に表示、会話がない場合はプレースホルダー表示）
+# 会話ウィンドウの表示
 # ------------------------
 st.header("会話履歴")
 if st.session_state["chat_log"]:
-    # 最新のメッセージが上に表示されるよう逆順にする
-    def display_chat_log(chat_log):
-        for msg in reversed(chat_log):
-            sender = msg["sender"]
-            message = msg["message"]
-            style = {"bg": "#F5F5F5", "color": "#000", "align": "left"}
-            if sender == "ユーザー":
-                style = {"bg": "#CCE5FF", "color": "#000", "align": "right"}
-            elif sender == "ゆかり":
-                style = {"bg": "#FFD1DC", "color": "#000", "align": "left"}
-            elif sender == "しんや":
-                style = {"bg": "#D1E8FF", "color": "#000", "align": "left"}
-            elif sender == "みのる":
-                style = {"bg": "#D1FFD1", "color": "#000", "align": "left"}
-            elif sender == "新キャラクター":
-                style = {"bg": "#FFE4B5", "color": "#000", "align": "left"}
-            bubble_html = (
-                f'<div style="background-color: {style["bg"]}; border: 1px solid #ddd; '
-                f'border-radius: 10px; padding: 8px; margin: 5px; color: {style["color"]}; '
-                f'font-family: Arial, sans-serif; text-align: {style["align"]}; max-width: 80%;">'
-                f'<strong>{sender}</strong><br>{message}</div>'
-            )
-            st.markdown(bubble_html, unsafe_allow_html=True)
     display_chat_log(st.session_state["chat_log"])
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
