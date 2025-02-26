@@ -182,82 +182,56 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 固定フッター（入力エリア）の配置
+# 上部：会話履歴表示エリア（スクロール可能）
 # ------------------------
 st.markdown(
     """
     <style>
-    .fixed-footer {
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        background: #FFF;
-        padding: 10px;
-        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-        z-index: 100;
-    }
     .chat-container {
-        margin-bottom: 150px; /* 固定フッター分の余白 */
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
     }
     </style>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
-
-# 会話履歴を上部に表示する領域
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 st.header("会話履歴")
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 if st.session_state["chat_log"]:
     display_chat_log(st.session_state["chat_log"])
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 固定フッター：入力エリア
-with st.container():
-    st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
-    with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
-        col1, col2 = st.columns(2)
-        with col1:
-            send_button = st.form_submit_button("送信")
-        with col2:
-            continue_button = st.form_submit_button("続きを話す")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 送信ボタンの処理
-    if send_button:
-        if user_input.strip():
-            st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
-            if len(st.session_state["chat_log"]) == 1:
-                persona_params = adjust_parameters(user_input)
-                discussion = generate_discussion(user_input, persona_params)
-                for line in discussion.split("\n"):
-                    line = line.strip()
-                    if line:
-                        parts = line.split(":", 1)
-                        sender = parts[0]
-                        message_text = parts[1].strip() if len(parts) > 1 else ""
-                        st.session_state["chat_log"].append({"sender": sender, "message": message_text})
-            else:
-                new_discussion = continue_discussion(user_input, "\n".join(
-                    [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES]
-                ))
-                for line in new_discussion.split("\n"):
-                    line = line.strip()
-                    if line:
-                        parts = line.split(":", 1)
-                        sender = parts[0]
-                        message_text = parts[1].strip() if len(parts) > 1 else ""
-                        st.session_state["chat_log"].append({"sender": sender, "message": message_text})
+# ------------------------
+# 下部：発言入力エリア（固定しない別枠）
+# ------------------------
+st.header("発言バー")
+with st.form("chat_form", clear_on_submit=True):
+    user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=80, key="user_input")
+    col1, col2 = st.columns(2)
+    with col1:
+        send_button = st.form_submit_button("送信")
+    with col2:
+        continue_button = st.form_submit_button("続きを話す")
+
+if send_button:
+    if user_input.strip():
+        st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
+        if len(st.session_state["chat_log"]) == 1:
+            persona_params = adjust_parameters(user_input)
+            discussion = generate_discussion(user_input, persona_params)
+            for line in discussion.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    sender = parts[0]
+                    message_text = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state["chat_log"].append({"sender": sender, "message": message_text})
         else:
-            st.warning("発言を入力してください。")
-    
-    # 続きを話すボタンの処理
-    if continue_button:
-        if st.session_state["chat_log"]:
-            default_input = "続きをお願いします。"
-            new_discussion = continue_discussion(default_input, "\n".join(
+            new_discussion = continue_discussion(user_input, "\n".join(
                 [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES]
             ))
             for line in new_discussion.split("\n"):
@@ -267,5 +241,21 @@ with st.container():
                     sender = parts[0]
                     message_text = parts[1].strip() if len(parts) > 1 else ""
                     st.session_state["chat_log"].append({"sender": sender, "message": message_text})
-        else:
-            st.warning("まずは会話を開始してください。")
+    else:
+        st.warning("発言を入力してください。")
+
+if continue_button:
+    if st.session_state["chat_log"]:
+        default_input = "続きをお願いします。"
+        new_discussion = continue_discussion(default_input, "\n".join(
+            [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES]
+        ))
+        for line in new_discussion.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                sender = parts[0]
+                message_text = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state["chat_log"].append({"sender": sender, "message": message_text})
+    else:
+        st.warning("まずは会話を開始してください。")
