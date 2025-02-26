@@ -3,7 +3,6 @@ import requests
 import re
 import random
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
-from streamlit.components.v1 import html
 
 # ------------------------
 # ページ設定
@@ -92,15 +91,12 @@ def generate_discussion(question: str, persona_params: dict) -> str:
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    new_name, new_personality = generate_new_character()
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
     prompt += (
-        "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
+        "\n上記情報を元に、3人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
@@ -109,19 +105,18 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
-        "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
+        "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
 def generate_summary(discussion: str) -> str:
     prompt = (
-        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
+        "以下は3人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
@@ -140,10 +135,9 @@ def generate_new_character() -> tuple:
 def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、各キャラクターには固有のアイコンと背景色を適用します。
+    ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
     最新のメッセージが上部に表示されるよう逆順にします。
     """
-    # キャラクターごとのアイコンとスタイルの定義
     icon_map = {
         "ユーザー": "🙂",
         "ゆかり": "🌸",
@@ -164,13 +158,10 @@ def display_chat_log(chat_log: list):
         text = msg["message"]
         icon = icon_map.get(sender, "")
         style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
-        # streamlit_chat の message() 関数で表示。ユーザーは is_user=True
         if sender == "ユーザー":
             st_message(f"{icon} {text}", is_user=True, key=sender+str(random.random()))
         else:
-            st_message(f"{icon} {sender}: {text}", is_user=False, key=sender+str(random.random()), 
-                       # message() は内部でスタイル変更は難しいため、ここではテキストの先頭にアイコンを追加
-                       )
+            st_message(f"{icon} {sender}: {text}", is_user=False, key=sender+str(random.random()))
 
 # ------------------------
 # セッションステートの初期化
@@ -194,7 +185,28 @@ if st.button("会話をまとめる"):
 # 固定フッター（入力エリア）の配置
 # ------------------------
 with st.container():
-    st.markdown('<div style="position: fixed; bottom: 0; width: 100%; background: #FFF; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">', unsafe_allow_html=True)
+    # 固定フッター用のCSSを埋め込む
+    st.markdown(
+        """
+        <style>
+        .fixed-footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #FFF;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        .chat-container {
+            margin-bottom: 150px; /* フッター分の余白 */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    # 入力バーは固定フッターに配置
+    st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
         col1, col2 = st.columns(2)
@@ -250,10 +262,12 @@ with st.container():
             st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 会話ウィンドウの表示
+# 会話ウィンドウの表示（入力エリアの上部に配置）
 # ------------------------
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 st.header("会話履歴")
 if st.session_state["chat_log"]:
     display_chat_log(st.session_state["chat_log"])
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
