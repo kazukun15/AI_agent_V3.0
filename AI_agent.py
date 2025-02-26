@@ -182,41 +182,50 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 画面を左右に分割して表示
-# 左側に会話履歴、右側に発言バーを配置
+# 固定フッター（入力エリア）の配置
 # ------------------------
-left_col, right_col = st.columns([3, 1])
+st.markdown(
+    """
+    <style>
+    .fixed-footer {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background: #FFF;
+        padding: 10px;
+        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+        z-index: 100;
+    }
+    .chat-container {
+        margin-bottom: 150px; /* 固定フッター分の余白 */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-with left_col:
-    st.header("会話履歴")
-    st.markdown(
-        """
-        <style>
-        .chat-container {
-            max-height: 600px;
-            overflow-y: auto;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-    if st.session_state["chat_log"]:
-        display_chat_log(st.session_state["chat_log"])
-    else:
-        st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# 会話履歴を上部に表示する領域
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+st.header("会話履歴")
+if st.session_state["chat_log"]:
+    display_chat_log(st.session_state["chat_log"])
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-with right_col:
-    st.header("発言バー")
+# 固定フッター：入力エリア
+with st.container():
+    st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=150, key="user_input")
+        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
         col1, col2 = st.columns(2)
         with col1:
             send_button = st.form_submit_button("送信")
         with col2:
             continue_button = st.form_submit_button("続きを話す")
+    st.markdown('</div>', unsafe_allow_html=True)
     
+    # 送信ボタンの処理
     if send_button:
         if user_input.strip():
             st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
@@ -244,6 +253,7 @@ with right_col:
         else:
             st.warning("発言を入力してください。")
     
+    # 続きを話すボタンの処理
     if continue_button:
         if st.session_state["chat_log"]:
             default_input = "続きをお願いします。"
