@@ -136,7 +136,7 @@ def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
     ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
-    最新のメッセージが上部に表示されるよう逆順にします。
+    最新のメッセージは会話履歴の下部に表示され、入力バーの近くに来ます。
     """
     icon_map = {
         "ユーザー": "🙂",
@@ -153,7 +153,8 @@ def display_chat_log(chat_log: list):
         "新キャラクター": {"bg": "#FFFACD", "align": "left"}
     }
     from streamlit_chat import message as st_message
-    for msg in reversed(chat_log):
+    # ここでは、チャットログはそのままの順序（古い順）で表示し、最新メッセージが下部に来るようにする
+    for msg in chat_log:
         sender = msg["sender"]
         text = msg["message"]
         icon = icon_map.get(sender, "")
@@ -193,12 +194,14 @@ st.markdown(
         padding: 10px;
         border: 1px solid #ddd;
         border-radius: 5px;
+        margin-bottom: 20px;
     }
     </style>
-    """, unsafe_allow_html=True
+    """,
+    unsafe_allow_html=True
 )
 st.header("会話履歴")
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+st.markdown('<div class="chat-container" id="chat-container">', unsafe_allow_html=True)
 if st.session_state["chat_log"]:
     display_chat_log(st.session_state["chat_log"])
 else:
@@ -206,7 +209,7 @@ else:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------
-# 下部：発言入力エリア（固定しない別枠）
+# 下部：発言入力エリア（別枠）
 # ------------------------
 st.header("発言バー")
 with st.form("chat_form", clear_on_submit=True):
