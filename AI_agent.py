@@ -11,7 +11,7 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V2.2.1")
 
 # ------------------------
-# ユーザーの名前入力（画面上部に表示）
+# ユーザーの名前入力（上部）
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
@@ -136,7 +136,7 @@ def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
     ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
-    最新のメッセージは会話履歴の下部に表示され、入力バーの近くに来ます。
+    会話履歴は古いものが上部、最新が下部に表示され、入力バーの近くに最新発言が表示されます。
     """
     icon_map = {
         "ユーザー": "🙂",
@@ -153,7 +153,7 @@ def display_chat_log(chat_log: list):
         "新キャラクター": {"bg": "#FFFACD", "align": "left"}
     }
     from streamlit_chat import message as st_message
-    # ここでは、チャットログはそのままの順序（古い順）で表示し、最新メッセージが下部に来るようにする
+    # ここは古い順で表示（最新の発言が入力エリア近くに来る）
     for msg in chat_log:
         sender = msg["sender"]
         text = msg["message"]
