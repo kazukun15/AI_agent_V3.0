@@ -19,7 +19,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
@@ -182,13 +182,13 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# タブ切替（会話履歴と発言バーを別画面で表示）
+# 画面を左右に分割して表示
+# 左側に会話履歴、右側に発言バーを配置
 # ------------------------
-tabs = st.tabs(["会話履歴", "発言バー"])
+left_col, right_col = st.columns([3, 1])
 
-with tabs[0]:
+with left_col:
     st.header("会話履歴")
-    # スクロール可能なコンテナ
     st.markdown(
         """
         <style>
@@ -207,15 +207,16 @@ with tabs[0]:
         st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-with tabs[1]:
+with right_col:
     st.header("発言バー")
     with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
+        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=150, key="user_input")
         col1, col2 = st.columns(2)
         with col1:
             send_button = st.form_submit_button("送信")
         with col2:
             continue_button = st.form_submit_button("続きを話す")
+    
     if send_button:
         if user_input.strip():
             st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
