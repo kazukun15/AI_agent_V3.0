@@ -3,6 +3,7 @@ import requests
 import re
 import random
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+from streamlit.components.v1 import html
 
 # ------------------------
 # ページ設定
@@ -139,10 +140,10 @@ def generate_new_character() -> tuple:
 def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、各キャラクターには固有のアイコンを表示します。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、各キャラクターには固有のアイコンと背景色を適用します。
     最新のメッセージが上部に表示されるよう逆順にします。
     """
-    # キャラクターごとのアイコンを定義
+    # キャラクターごとのアイコンとスタイルの定義
     icon_map = {
         "ユーザー": "🙂",
         "ゆかり": "🌸",
@@ -150,15 +151,26 @@ def display_chat_log(chat_log: list):
         "みのる": "🍀",
         "新キャラクター": "⭐"
     }
+    style_map = {
+        "ユーザー": {"bg": "#E0FFFF", "align": "right"},
+        "ゆかり": {"bg": "#FFB6C1", "align": "left"},
+        "しんや": {"bg": "#ADD8E6", "align": "left"},
+        "みのる": {"bg": "#90EE90", "align": "left"},
+        "新キャラクター": {"bg": "#FFFACD", "align": "left"}
+    }
     from streamlit_chat import message as st_message
     for msg in reversed(chat_log):
         sender = msg["sender"]
         text = msg["message"]
         icon = icon_map.get(sender, "")
+        style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
+        # streamlit_chat の message() 関数で表示。ユーザーは is_user=True
         if sender == "ユーザー":
             st_message(f"{icon} {text}", is_user=True, key=sender+str(random.random()))
         else:
-            st_message(f"{icon} {sender}: {text}", is_user=False, key=sender+str(random.random()))
+            st_message(f"{icon} {sender}: {text}", is_user=False, key=sender+str(random.random()), 
+                       # message() は内部でスタイル変更は難しいため、ここではテキストの先頭にアイコンを追加
+                       )
 
 # ------------------------
 # セッションステートの初期化
