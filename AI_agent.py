@@ -135,9 +135,10 @@ def generate_new_character() -> tuple:
 def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、各キャラクターには固有のアイコンと背景色を適用します。
     最新のメッセージが上部に表示されるよう逆順にします。
     """
+    # キャラクターごとのアイコンとスタイルの定義
     icon_map = {
         "ユーザー": "🙂",
         "ゆかり": "🌸",
@@ -167,7 +168,7 @@ def display_chat_log(chat_log: list):
 # セッションステートの初期化
 # ------------------------
 if "chat_log" not in st.session_state:
-    st.session_state["chat_log"] = []
+    st.session_state["chat_log"] = ""
 
 # ------------------------
 # 会話まとめボタン
@@ -182,10 +183,28 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
+# 画面上部に会話履歴の表示
+# ------------------------
+st.markdown(
+    """
+    <style>
+    .chat-container {
+        margin-bottom: 150px; /* 入力バー分の余白 */
+    }
+    </style>
+    """, unsafe_allow_html=True)
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+st.header("会話履歴")
+if st.session_state["chat_log"]:
+    display_chat_log(st.session_state["chat_log"])
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------
 # 固定フッター（入力エリア）の配置
 # ------------------------
 with st.container():
-    # 固定フッター用のCSSを埋め込む
     st.markdown(
         """
         <style>
@@ -198,14 +217,8 @@ with st.container():
             box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
             z-index: 100;
         }
-        .chat-container {
-            margin-bottom: 150px; /* フッター分の余白 */
-        }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
-    # 入力バーは固定フッターに配置
+        """, unsafe_allow_html=True)
     st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
@@ -219,6 +232,9 @@ with st.container():
     # 送信ボタンの処理
     if send_button:
         if user_input.strip():
+            # ユーザー発言をチャットログに追加（右寄せ）
+            if st.session_state["chat_log"] == "":
+                st.session_state["chat_log"] = []
             st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
             if len(st.session_state["chat_log"]) == 1:
                 persona_params = adjust_parameters(user_input)
@@ -260,14 +276,3 @@ with st.container():
                     st.session_state["chat_log"].append({"sender": sender, "message": message_text})
         else:
             st.warning("まずは会話を開始してください。")
-
-# ------------------------
-# 会話ウィンドウの表示（入力エリアの上部に配置）
-# ------------------------
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-st.header("会話履歴")
-if st.session_state["chat_log"]:
-    display_chat_log(st.session_state["chat_log"])
-else:
-    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
