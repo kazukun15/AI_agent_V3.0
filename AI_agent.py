@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import re
 import random
-from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+from streamlit_chat import message  # streamlit-chat の message() 関数
 
 # ------------------------
 # ページ設定
@@ -27,7 +27,6 @@ NAMES = ["ゆかり", "しんや", "みのる"]
 # ------------------------
 
 def analyze_question(question: str) -> int:
-    """質問文から感情キーワードと論理キーワードを解析し、スコアを返す"""
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
     keywords_logical = ["理由", "原因", "仕組み", "方法"]
@@ -40,7 +39,6 @@ def analyze_question(question: str) -> int:
     return score
 
 def adjust_parameters(question: str) -> dict:
-    """質問に応じた各キャラクターのプロンプトパラメータを生成する"""
     score = analyze_question(question)
     params = {}
     params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
@@ -53,7 +51,6 @@ def adjust_parameters(question: str) -> dict:
     return params
 
 def remove_json_artifacts(text: str) -> str:
-    """不要なJSON形式のアーティファクトを除去する"""
     if not isinstance(text, str):
         text = str(text) if text else ""
     pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
@@ -61,7 +58,6 @@ def remove_json_artifacts(text: str) -> str:
     return cleaned.strip()
 
 def call_gemini_api(prompt: str) -> str:
-    """Gemini API を呼び出して生成テキストを返す"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json"}
@@ -91,51 +87,43 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
-    """最初の会話生成。ユーザーの質問と各キャラクターのパラメータを元にプロンプトを構築"""
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    # 新キャラクターの生成
-    new_name, new_personality = generate_new_character()
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
     prompt += (
-        "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
+        "\n上記情報を元に、3人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
 def continue_discussion(additional_input: str, current_discussion: str) -> str:
-    """会話の続き生成。既存の会話と追加発言を元にプロンプトを構築"""
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
-        "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
+        "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
 def generate_summary(discussion: str) -> str:
-    """これまでの会話を要約するプロンプトを生成してAPIを呼び出す"""
     prompt = (
-        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
+        "以下は3人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
 
 def generate_new_character() -> tuple:
-    """新キャラクターの名前と性格をランダムで生成する。"""
+    """新キャラクターの名前と性格をランダム生成する。"""
     candidates = [
         ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
@@ -147,11 +135,10 @@ def generate_new_character() -> tuple:
 
 def display_chat_log(chat_log: list):
     """
-    chat_log の各メッセージをLINE風のバブルチャット形式で表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、テキストは自動で折り返されます。
+    chat_log の各メッセージをLINE風のバブルチャットとして表示する。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、テキストは自動折り返し。
     最新のメッセージが上部に表示されるよう逆順にします。
     """
-    # streamlit-chat の message() 関数を利用
     from streamlit_chat import message as st_message
     for msg in reversed(chat_log):
         sender = msg["sender"]
@@ -211,7 +198,7 @@ with st.container():
                         st.session_state["chat_log"].append({"sender": sender, "message": message_text})
             else:
                 new_discussion = continue_discussion(user_input, "\n".join(
-                    [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"] == "新キャラクター"]
+                    [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES]
                 ))
                 for line in new_discussion.split("\n"):
                     line = line.strip()
@@ -228,7 +215,7 @@ with st.container():
         if st.session_state["chat_log"]:
             default_input = "続きをお願いします。"
             new_discussion = continue_discussion(default_input, "\n".join(
-                [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"] == "新キャラクター"]
+                [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES]
             ))
             for line in new_discussion.split("\n"):
                 line = line.strip()
