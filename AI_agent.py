@@ -19,7 +19,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
+MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
@@ -135,10 +135,9 @@ def generate_new_character() -> tuple:
 def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、各キャラクターには固有のアイコンと背景色を適用します。
+    ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
     最新のメッセージが上部に表示されるよう逆順にします。
     """
-    # キャラクターごとのアイコンとスタイルの定義
     icon_map = {
         "ユーザー": "🙂",
         "ゆかり": "🌸",
@@ -168,7 +167,7 @@ def display_chat_log(chat_log: list):
 # セッションステートの初期化
 # ------------------------
 if "chat_log" not in st.session_state:
-    st.session_state["chat_log"] = ""
+    st.session_state["chat_log"] = []
 
 # ------------------------
 # 会話まとめボタン
@@ -183,43 +182,33 @@ if st.button("会話をまとめる"):
         st.warning("まずは会話を開始してください。")
 
 # ------------------------
-# 画面上部に会話履歴の表示
+# タブ切替（会話履歴と発言バーを別画面で表示）
 # ------------------------
-st.markdown(
-    """
-    <style>
-    .chat-container {
-        margin-bottom: 150px; /* 入力バー分の余白 */
-    }
-    </style>
-    """, unsafe_allow_html=True)
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-st.header("会話履歴")
-if st.session_state["chat_log"]:
-    display_chat_log(st.session_state["chat_log"])
-else:
-    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+tabs = st.tabs(["会話履歴", "発言バー"])
 
-# ------------------------
-# 固定フッター（入力エリア）の配置
-# ------------------------
-with st.container():
+with tabs[0]:
+    st.header("会話履歴")
+    # スクロール可能なコンテナ
     st.markdown(
         """
         <style>
-        .fixed-footer {
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            background: #FFF;
-            padding: 10px;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-            z-index: 100;
+        .chat-container {
+            max-height: 600px;
+            overflow-y: auto;
         }
         </style>
-        """, unsafe_allow_html=True)
-    st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    if st.session_state["chat_log"]:
+        display_chat_log(st.session_state["chat_log"])
+    else:
+        st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tabs[1]:
+    st.header("発言バー")
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
         col1, col2 = st.columns(2)
@@ -227,14 +216,8 @@ with st.container():
             send_button = st.form_submit_button("送信")
         with col2:
             continue_button = st.form_submit_button("続きを話す")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 送信ボタンの処理
     if send_button:
         if user_input.strip():
-            # ユーザー発言をチャットログに追加（右寄せ）
-            if st.session_state["chat_log"] == "":
-                st.session_state["chat_log"] = []
             st.session_state["chat_log"].append({"sender": "ユーザー", "message": user_input})
             if len(st.session_state["chat_log"]) == 1:
                 persona_params = adjust_parameters(user_input)
@@ -260,7 +243,6 @@ with st.container():
         else:
             st.warning("発言を入力してください。")
     
-    # 続きを話すボタンの処理
     if continue_button:
         if st.session_state["chat_log"]:
             default_input = "続きをお願いします。"
