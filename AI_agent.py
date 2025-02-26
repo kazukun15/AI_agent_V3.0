@@ -2,14 +2,13 @@ import streamlit as st
 import requests
 import re
 import random
+from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
 # ------------------------
 # ページ設定
 # ------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-
-# タイトルの表示
-st.title("ぼくのともだち V2.2")
+st.title("ぼくのともだち V2.2.1")
 
 # ------------------------
 # ユーザーの名前入力（画面上部に表示）
@@ -20,7 +19,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
@@ -28,6 +27,7 @@ NAMES = ["ゆかり", "しんや", "みのる"]
 # ------------------------
 
 def analyze_question(question: str) -> int:
+    """質問文から感情キーワードと論理キーワードを解析し、スコアを返す"""
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
     keywords_logical = ["理由", "原因", "仕組み", "方法"]
@@ -40,6 +40,7 @@ def analyze_question(question: str) -> int:
     return score
 
 def adjust_parameters(question: str) -> dict:
+    """質問に応じた各キャラクターのプロンプトパラメータを生成する"""
     score = analyze_question(question)
     params = {}
     params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
@@ -52,6 +53,7 @@ def adjust_parameters(question: str) -> dict:
     return params
 
 def remove_json_artifacts(text: str) -> str:
+    """不要なJSON形式のアーティファクトを除去する"""
     if not isinstance(text, str):
         text = str(text) if text else ""
     pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
@@ -59,6 +61,7 @@ def remove_json_artifacts(text: str) -> str:
     return cleaned.strip()
 
 def call_gemini_api(prompt: str) -> str:
+    """Gemini API を呼び出して生成テキストを返す"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json"}
@@ -88,6 +91,7 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
+    """最初の会話生成。ユーザーの質問と各キャラクターのパラメータを元にプロンプトを構築"""
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     for name, params in persona_params.items():
@@ -107,6 +111,7 @@ def generate_discussion(question: str, persona_params: dict) -> str:
     return call_gemini_api(prompt)
 
 def continue_discussion(additional_input: str, current_discussion: str) -> str:
+    """会話の続き生成。既存の会話と追加発言を元にプロンプトを構築"""
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
@@ -121,6 +126,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     return call_gemini_api(prompt)
 
 def generate_summary(discussion: str) -> str:
+    """これまでの会話を要約するプロンプトを生成してAPIを呼び出す"""
     prompt = (
         "以下は4人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
@@ -129,12 +135,9 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 def generate_new_character() -> tuple:
-    """
-    ランダムで新キャラクターの名前と性格を生成する。
-    既存のキャラクター（ゆかり、しんや、みのる）とは全く異なる性格に設定する。
-    """
+    """新キャラクターの名前と性格をランダムで生成する。"""
     candidates = [
-        ("たけし", "冷静沈着で心優しい。お兄さん的な立ち位置"),
+        ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
         ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
         ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
@@ -144,56 +147,19 @@ def generate_new_character() -> tuple:
 
 def display_chat_log(chat_log: list):
     """
-    chat_log の各メッセージを、LINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達4人の発言は左寄せで、テキストは自動で折り返されます。
-    最新のメッセージが上部に表示されるように逆順にレンダリングします。
+    chat_log の各メッセージをLINE風のバブルチャット形式で表示する。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示し、テキストは自動で折り返されます。
+    最新のメッセージが上部に表示されるよう逆順にします。
     """
-    style_map = {
-        "ユーザー": {
-            "bg": "#CCE5FF",
-            "color": "#000",
-            "float": "right"
-        },
-        "ゆかり": {
-            "bg": "#FFD1DC",
-            "color": "#000",
-            "float": "left"
-        },
-        "しんや": {
-            "bg": "#D1E8FF",
-            "color": "#000",
-            "float": "left"
-        },
-        "みのる": {
-            "bg": "#D1FFD1",
-            "color": "#000",
-            "float": "left"
-        },
-        "新キャラクター": {
-            "bg": "#FFE4B5",
-            "color": "#000",
-            "float": "left"
-        }
-    }
-    # 最新メッセージが上に表示されるよう逆順に
+    # streamlit-chat の message() 関数を利用
+    from streamlit_chat import message as st_message
     for msg in reversed(chat_log):
         sender = msg["sender"]
-        message = msg["message"]
-        style = style_map.get(sender, {"bg": "#F5F5F5", "color": "#000", "float": "left"})
-        bubble_style = (
-            f"background-color: {style['bg']}; "
-            "border: 1px solid #ddd; "
-            "border-radius: 10px; "
-            "padding: 8px; "
-            "margin: 5px; "
-            f"color: {style['color']}; "
-            "font-family: Arial, sans-serif; "
-            f"float: {style['float']}; "
-            "max-width: 70%; "
-            "clear: both;"
-        )
-        bubble_html = f'<div style="{bubble_style}"><strong>{sender}</strong><br>{message}</div>'
-        st.markdown(bubble_html, unsafe_allow_html=True)
+        text = msg["message"]
+        if sender == "ユーザー":
+            st_message(text, is_user=True)
+        else:
+            st_message(f"{sender}: {text}", is_user=False)
 
 # ------------------------
 # セッションステートの初期化
@@ -217,7 +183,9 @@ if st.button("会話をまとめる"):
 # 固定フッター（入力エリア）の配置
 # ------------------------
 with st.container():
-    st.markdown('<div style="position: fixed; bottom: 0; width: 100%; background: #FFF; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="position: fixed; bottom: 0; width: 100%; background: #FFF; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">'
+        , unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
         col1, col2 = st.columns(2)
@@ -239,8 +207,8 @@ with st.container():
                     if line:
                         parts = line.split(":", 1)
                         sender = parts[0]
-                        message = parts[1].strip() if len(parts) > 1 else ""
-                        st.session_state["chat_log"].append({"sender": sender, "message": message})
+                        message_text = parts[1].strip() if len(parts) > 1 else ""
+                        st.session_state["chat_log"].append({"sender": sender, "message": message_text})
             else:
                 new_discussion = continue_discussion(user_input, "\n".join(
                     [f'{msg["sender"]}: {msg["message"]}' for msg in st.session_state["chat_log"] if msg["sender"] in NAMES or msg["sender"] == "新キャラクター"]
@@ -250,8 +218,8 @@ with st.container():
                     if line:
                         parts = line.split(":", 1)
                         sender = parts[0]
-                        message = parts[1].strip() if len(parts) > 1 else ""
-                        st.session_state["chat_log"].append({"sender": sender, "message": message})
+                        message_text = parts[1].strip() if len(parts) > 1 else ""
+                        st.session_state["chat_log"].append({"sender": sender, "message": message_text})
         else:
             st.warning("発言を入力してください。")
     
@@ -267,8 +235,8 @@ with st.container():
                 if line:
                     parts = line.split(":", 1)
                     sender = parts[0]
-                    message = parts[1].strip() if len(parts) > 1 else ""
-                    st.session_state["chat_log"].append({"sender": sender, "message": message})
+                    message_text = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state["chat_log"].append({"sender": sender, "message": message_text})
         else:
             st.warning("まずは会話を開始してください。")
 
