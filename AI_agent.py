@@ -154,11 +154,11 @@ def display_chat_log(chat_log: list):
     """
     avatar_map = {
         # AI_agent_V3.0 ディレクトリ配下に avatars フォルダがある場合
-        "ユーザー": "AI_agent_V3.0/avatars/user.png",
-        "ゆかり": "AI_agent_V3.0/avatars/yukari.png",
-        "しんや": "AI_agent_V3.0/avatars/shinya.png",
-        "みのる": "AI_agent_V3.0/avatars/minoru.png",
-        "新キャラクター": "AI_agent_V3.0/avatars/new_character.png"
+        "ユーザー": "avatars/user.png",
+        "ゆかり": "avatars/yukari.png",
+        "しんや": "avatars/shinya.png",
+        "みのる": "avatars/minoru.png",
+        "新キャラクター": "avatars/new_character.png"
     }
     style_map = {
         "ユーザー": {"bg": "#E0FFFF", "align": "right"},
