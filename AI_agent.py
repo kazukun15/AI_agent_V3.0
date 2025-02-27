@@ -3,6 +3,7 @@ import re
 import random
 from PIL import Image
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+from google import genai  # Google Gen AI ライブラリをインポート
 
 # ------------------------
 # ページ設定
@@ -49,11 +50,17 @@ MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 
 # ------------------------
-# AI設定（APIキーなど）
+# 定数／設定（APIキーなど）
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+# ※新キャラクターは別途追加
+
+# ------------------------
+# Google Gen AI クライアントの初期化
+# ------------------------
+client = genai.Client(api_key=API_KEY)
 
 # ------------------------
 # セッション初期化
@@ -88,6 +95,19 @@ avatar_img_dict = {
 }
 
 # ------------------------
+# Gemini API 呼び出し関数（google.genai を使用）
+# ------------------------
+def call_gemini_api(prompt: str) -> str:
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"エラー: Gemini API 呼び出し中に例外が発生しました ({e})"
+
+# ------------------------
 # 会話生成関連関数
 # ------------------------
 def analyze_question(question: str) -> int:
@@ -113,13 +133,9 @@ def adjust_parameters(question: str) -> dict:
     else:
         params[SHINYA_NAME] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
         params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な視点からの考察"}
-    # 新キャラクターには独創的な視点を付与
+    # 新キャラクターは独創的な視点で回答
     params[NEW_CHAR_NAME] = {"style": "独創的", "detail": "自由な発想で意見を述べる"}
     return params
-
-def call_gemini_api(prompt: str) -> str:
-    # 実際には Gemini API を呼び出す処理を記述します
-    return f"{prompt[:20]} ...（応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
@@ -254,7 +270,7 @@ if user_msg:
     with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
         st.write(user_msg)
 
-    # 友達の応答生成（ダミー API 呼び出し）
+    # 友達の応答生成（Gemini API 呼び出し）
     if len(st.session_state["chat_log"]) == 1:
         persona_params = adjust_parameters(user_msg)
         discussion = generate_discussion(user_msg, persona_params)
@@ -266,6 +282,7 @@ if user_msg:
         )
         discussion = continue_discussion(user_msg, history)
 
+    # Gemini から返された応答を行ごとに分解してチャットログに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -273,7 +290,4 @@ if user_msg:
             sender = parts[0]
             message_text = parts[1].strip() if len(parts) > 1 else ""
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-    try:
-        st.experimental_rerun()
-    except AttributeError:
-        pass
+    st.experimental_rerun()
