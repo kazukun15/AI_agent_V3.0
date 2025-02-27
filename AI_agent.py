@@ -66,7 +66,6 @@ if "initialized" not in st.session_state:
 # ------------------------
 # アイコン画像の読み込み
 # ------------------------
-# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" に変更してください。
 try:
     img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
@@ -126,7 +125,7 @@ def remove_json_artifacts(text: str) -> str:
 
 def call_gemini_api(prompt: str) -> str:
     # 実際には Gemini API を呼び出す処理を記述します
-    # ここでは例としてプロンプトの一部を返すだけにしています
+    # ここでは例としてプロンプトの一部を返すだけ
     return f"{prompt[:20]} ...（応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
@@ -176,22 +175,9 @@ def generate_new_character() -> tuple:
     return random.choice(candidates)
 
 # ------------------------
-# 初回会話の自動生成（会話ログが空の場合）
+# ★★ 「はじめまして」ダミーを生成する処理を削除 ★★
+#     （ st.session_state["chat_log"] が空でも自動挿入しない ）
 # ------------------------
-if not st.session_state.get("initialized", False):
-    st.session_state["initialized"] = True
-    if len(st.session_state["chat_log"]) == 0:
-        first_user_msg = "はじめまして。"
-        st.session_state["chat_log"].append({"name": USER_NAME, "msg": first_user_msg})
-        persona_params = adjust_parameters(first_user_msg)
-        discussion = generate_discussion(first_user_msg, persona_params)
-        for line in discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                sender = parts[0]
-                message_text = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
 # ------------------------
 # 会話ログの表示
@@ -214,18 +200,24 @@ st.header("発言バー")
 user_msg = st.chat_input("ここにメッセージを入力")
 
 if user_msg:
+    # 1) ユーザーの発言を会話ログへ追加
     st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_msg})
     with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
         st.write(user_msg)
-    # 応答生成
+
+    # 2) AI応答生成
     if len(st.session_state["chat_log"]) == 1:
         persona_params = adjust_parameters(user_msg)
         discussion = generate_discussion(user_msg, persona_params)
     else:
-        discussion = continue_discussion(user_msg, "\n".join(
-            [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]]
-        ))
-    # 生成結果を解析してチャットログに追加
+        # 既存のキャラクター同士の発言のみをまとめてテキストにして渡す
+        existing_dialog = "\n".join(
+            f'{c["name"]}: {c["msg"]}' for c in st.session_state["chat_log"]
+            if c["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+        )
+        discussion = continue_discussion(user_msg, existing_dialog)
+
+    # 3) 生成結果を解析してチャットログに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -233,5 +225,6 @@ if user_msg:
             sender = parts[0]
             message_text = parts[1].strip() if len(parts) > 1 else ""
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
+
     # 表示更新
     st.experimental_rerun()
