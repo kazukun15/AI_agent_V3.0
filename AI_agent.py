@@ -25,7 +25,7 @@ st.markdown(
 )
 
 # ------------------------
-# ユーザーの名前入力
+# ユーザーの名前入力（上部）
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
@@ -33,7 +33,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
@@ -131,7 +131,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は3人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
@@ -152,14 +152,14 @@ def display_chat_log(chat_log: list):
     会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
     最新の発言が入力バーの直上に表示されます。
     """
-    # GitHubリポジトリ内の avatars フォルダ内の画像を参照
+    # GitHub リポジトリ内の画像フォルダのパスに合わせる
     avatar_map = {
-    "ユーザー": "AI_counselor/avatars/user.png",
-    "ゆかり": "AI_counselor/avatars/yukari.png",
-    "しんや": "AI_counselor/avatars/shinya.png",
-    "みのる": "AI_counselor/avatars/minoru.png",
-    "新キャラクター": "AI_counselor/avatars/new_character.png"
-}
+        "ユーザー": "AI_agent_V3.0/avatars/user.png",
+        "ゆかり": "AI_agent_V3.0/avatars/yukari.png",
+        "しんや": "AI_agent_V3.0/avatars/shinya.png",
+        "みのる": "AI_agent_V3.0/avatars/minoru.png",
+        "新キャラクター": "AI_agent_V3.0/avatars/new_character.png"
+    }
     style_map = {
         "ユーザー": {"bg": "#E0FFFF", "align": "right"},
         "ゆかり": {"bg": "#FFB6C1", "align": "left"},
