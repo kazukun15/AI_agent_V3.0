@@ -222,23 +222,6 @@ def display_chat_log(chat_log: list):
             """
         st.markdown(html_content, unsafe_allow_html=True)
 
-# ------------------------
-# 初回会話の自動生成（会話ログが空の場合）
-# ------------------------
-if not st.session_state.get("initialized", False):
-    st.session_state["initialized"] = True
-    if len(st.session_state["chat_log"]) == 0:
-        first_user_msg = "はじめまして。"
-        st.session_state["chat_log"].append({"name": USER_NAME, "msg": first_user_msg})
-        persona_params = adjust_parameters(first_user_msg)
-        discussion = generate_discussion(first_user_msg, persona_params)
-        for line in discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                sender = parts[0]
-                message_text = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
 # ------------------------
 # 会話ログの表示（上部：スクロール可能な領域）
