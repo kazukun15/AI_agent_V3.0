@@ -54,6 +54,7 @@ NEW_CHAR_NAME = "新キャラクター"
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ------------------------
 # セッション初期化
@@ -66,7 +67,7 @@ if "initialized" not in st.session_state:
 # ------------------------
 # アイコン画像の読み込み
 # ------------------------
-# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" に変更してください。
+# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" としてください。
 try:
     img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
@@ -87,11 +88,11 @@ avatar_img_dict = {
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
     NEW_CHAR_NAME: img_newchar,
-    ASSISTANT_NAME: "🤖",  # アシスタントは絵文字で代用
+    ASSISTANT_NAME: "🤖",  # 絵文字で代用
 }
 
 # ------------------------
-# 会話生成関数（実際のAPI呼び出しがあればそちらを使用）
+# 会話生成関連関数
 # ------------------------
 def analyze_question(question: str) -> int:
     score = 0
@@ -126,7 +127,6 @@ def remove_json_artifacts(text: str) -> str:
 
 def call_gemini_api(prompt: str) -> str:
     # 実際には Gemini API を呼び出す処理を記述します
-    # ここでは例としてプロンプトの一部を返すだけにしています
     return f"{prompt[:20]} ...（応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
@@ -175,6 +175,53 @@ def generate_new_character() -> tuple:
     ]
     return random.choice(candidates)
 
+def display_chat_log(chat_log: list):
+    """
+    chat_log の各メッセージを、各キャラクターのアバター画像を横に表示する形で、
+    会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
+    最新の発言が入力バーの直上に表示されます。
+    """
+    avatar_map = {
+        USER_NAME: "avatars/user.png",
+        YUKARI_NAME: "avatars/yukari.png",
+        SHINYA_NAME: "avatars/shinya.png",
+        MINORU_NAME: "avatars/minoru.png",
+        NEW_CHAR_NAME: "avatars/new_character.png",
+        ASSISTANT_NAME: "🤖"
+    }
+    style_map = {
+        USER_NAME: {"bg": "#E0FFFF", "align": "right"},
+        YUKARI_NAME: {"bg": "#FFB6C1", "align": "left"},
+        SHINYA_NAME: {"bg": "#ADD8E6", "align": "left"},
+        MINORU_NAME: {"bg": "#90EE90", "align": "left"},
+        NEW_CHAR_NAME: {"bg": "#FFFACD", "align": "left"},
+        ASSISTANT_NAME: {"bg": "#F0F0F0", "align": "left"}
+    }
+    for msg in chat_log:
+        sender = msg.get("name", "不明")
+        text = msg.get("msg", "")
+        avatar = avatar_map.get(sender, "")
+        style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
+        if sender == USER_NAME:
+            html_content = f"""
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin: 5px 0;">
+                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px; margin-right: 10px;">
+                    {text}
+                </div>
+                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%;">
+            </div>
+            """
+        else:
+            html_content = f"""
+            <div style="display: flex; justify-content: flex-start; align-items: center; margin: 5px 0;">
+                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%; margin-right: 10px;">
+                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px;">
+                    {sender}: {text}
+                </div>
+            </div>
+            """
+        st.markdown(html_content, unsafe_allow_html=True)
+
 # ------------------------
 # 初回会話の自動生成（会話ログが空の場合）
 # ------------------------
@@ -194,21 +241,34 @@ if not st.session_state.get("initialized", False):
                 st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
 # ------------------------
-# 会話ログの表示
+# 会話ログの表示（上部：スクロール可能な領域）
 # ------------------------
+st.markdown(
+    """
+    <style>
+    .chat-container {
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        background-color: #ffffffaa;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 st.header("会話履歴")
 st.markdown('<div class="chat-container" id="chat-container">', unsafe_allow_html=True)
 if st.session_state["chat_log"]:
-    for chat in st.session_state["chat_log"]:
-        avatar = avatar_img_dict.get(chat.get("name"), None)
-        with st.chat_message(chat.get("name"), avatar=avatar):
-            st.write(chat.get("msg"))
+    display_chat_log(st.session_state["chat_log"])
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------
-# 発言入力
+# 発言入力（下部）
 # ------------------------
 st.header("発言バー")
 user_msg = st.chat_input("ここにメッセージを入力")
@@ -217,7 +277,8 @@ if user_msg:
     st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_msg})
     with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
         st.write(user_msg)
-    # 応答生成
+    # 友達の応答生成（ダミーAPI呼び出し）
+    # 初回以降は continue_discussion を利用、初回は generate_discussion
     if len(st.session_state["chat_log"]) == 1:
         persona_params = adjust_parameters(user_msg)
         discussion = generate_discussion(user_msg, persona_params)
@@ -225,7 +286,6 @@ if user_msg:
         discussion = continue_discussion(user_msg, "\n".join(
             [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]]
         ))
-    # 生成結果を解析してチャットログに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -233,5 +293,4 @@ if user_msg:
             sender = parts[0]
             message_text = parts[1].strip() if len(parts) > 1 else ""
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-    # 表示更新
     st.experimental_rerun()
