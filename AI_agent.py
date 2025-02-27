@@ -40,21 +40,21 @@ st.markdown(
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
 # ------------------------
-# 定数／設定
-# ------------------------
-# API_KEY などの設定は残しておきますが、ここでは実際のAPI呼び出しは行わず、友達応答は固定メッセージ例で処理します。
-API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
-NAMES = ["ゆかり", "しんや", "みのる"]
-
-# ------------------------
-# キャラクター定義
+# 定数／キャラクター名設定
 # ------------------------
 USER_NAME = "user"
+ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+
+# ------------------------
+# AI設定（APIキーなど）
+# ------------------------
+API_KEY = st.secrets["general"]["api_key"]
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 
 # ------------------------
 # セッション初期化
@@ -66,14 +66,15 @@ if "initialized" not in st.session_state:
     st.session_state["initialized"] = False
 
 # ------------------------
-# アイコン画像の読み込み（GitHub内の相対パス）
+# アイコン画像の読み込み
 # ------------------------
+# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" としてください。
 try:
-    img_user = Image.open("AI_agent_V3.0/avatars/user.png")
-    img_yukari = Image.open("AI_agent_V3.0/avatars/yukari.png")
-    img_shinya = Image.open("AI_agent_V3.0/avatars/shinya.png")
-    img_minoru = Image.open("AI_agent_V3.0/avatars/minoru.png")
-    img_newchar = Image.open("AI_agent_V3.0/avatars/new_character.png")
+    img_user = Image.open("avatars/user.png")
+    img_yukari = Image.open("avatars/yukari.png")
+    img_shinya = Image.open("avatars/shinya.png")
+    img_minoru = Image.open("avatars/minoru.png")
+    img_newchar = Image.open("avatars/new_character.png")
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
     img_user = "👤"
@@ -88,10 +89,11 @@ avatar_img_dict = {
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
     NEW_CHAR_NAME: img_newchar,
+    ASSISTANT_NAME: "🤖",  # 絵文字で代用
 }
 
 # ------------------------
-# 関数定義（会話生成系はそのまま残す）
+# 会話生成関連関数
 # ------------------------
 
 def analyze_question(question: str) -> int:
@@ -125,9 +127,8 @@ def remove_json_artifacts(text: str) -> str:
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
-# 以下は実際のAPI呼び出し部分ですが、今回はダミーは削除し、固定の応答例を返します。
+# 本来はAPI呼び出しですが、ここではダミーの固定応答を返します。
 def call_gemini_api(prompt: str) -> str:
-    # 実際のAPI呼び出しは行わず、プロンプトの先頭部分を含む固定テキストを返す
     return f"{prompt[:20]} ...（固定応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
@@ -161,7 +162,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は3人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
@@ -182,13 +183,14 @@ def display_chat_log(chat_log: list):
     会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
     最新の発言が入力バーの直上に表示されます。
     """
+    # GitHubリポジトリ内のパスに合わせる
     avatar_map = {
-        USER_NAME: "AI_agent_V3.0/avatars/user.png",
-        YUKARI_NAME: "AI_agent_V3.0/avatars/yukari.png",
-        SHINYA_NAME: "AI_agent_V3.0/avatars/shinya.png",
-        MINORU_NAME: "AI_agent_V3.0/avatars/minoru.png",
-        NEW_CHAR_NAME: "AI_agent_V3.0/avatars/new_character.png",
-        ASSISTANT_NAME: "🤖"  # 絵文字で代用
+        USER_NAME: "avatars/user.png",
+        YUKARI_NAME: "avatars/yukari.png",
+        SHINYA_NAME: "avatars/shinya.png",
+        MINORU_NAME: "avatars/minoru.png",
+        NEW_CHAR_NAME: "avatars/new_character.png",
+        ASSISTANT_NAME: "🤖"
     }
     style_map = {
         USER_NAME: {"bg": "#E0FFFF", "align": "right"},
@@ -231,10 +233,8 @@ if not st.session_state.get("initialized", False):
     if len(st.session_state["chat_log"]) == 0:
         first_user_msg = "はじめまして。"
         st.session_state["chat_log"].append({"name": USER_NAME, "msg": first_user_msg})
-        # 友達の応答として adjust_parameters と generate_discussion を利用
         persona_params = adjust_parameters(first_user_msg)
         discussion = generate_discussion(first_user_msg, persona_params)
-        # 生成結果は改行ごとに分割して、各行をチャットログに追加
         for line in discussion.split("\n"):
             line = line.strip()
             if line:
