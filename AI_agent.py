@@ -11,7 +11,21 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V2.2.1")
 
 # ------------------------
-# ユーザーの名前入力（上部）
+# 背景画像の設定（オプション）
+# ------------------------
+st.markdown(
+    """
+    <style>
+    body {
+        background-color: #f0f2f6;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ------------------------
+# ユーザーの名前入力
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
@@ -19,7 +33,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # 定数／設定
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
+MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = ["ゆかり", "しんや", "みのる"]
 
 # ------------------------
@@ -117,7 +131,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は3人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
@@ -134,18 +148,21 @@ def generate_new_character() -> tuple:
 
 def display_chat_log(chat_log: list):
     """
-    chat_log の各メッセージを、キャラクターごとのアバターと共に、会話履歴エリアに表示する。
-    会話は古いものが上部、最新のものが下部に表示され、最新発言が入力バーに近い位置に来ます。
+    chat_log の各メッセージを、各キャラクターのアバター画像を横に表示する形で、
+    会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
+    最新の発言が入力バーの直上に表示されます。
     """
-    # 各キャラクターのアバター画像（例: 画像URLを適宜変更してください）
+    # GitHubリポジトリ内の avatars フォルダ内の画像を参照
     avatar_map = {
-        "ユーザー": "https://i.imgur.com/4KXjE3C.png",
-        "ゆかり": "https://i.imgur.com/1YzX0Gz.png",
-        "しんや": "https://i.imgur.com/EXAMPLE1.png",
-        "みのる": "https://i.imgur.com/EXAMPLE2.png",
-        "新キャラクター": "https://i.imgur.com/EXAMPLE3.png"
+       avatar_map = {
+    "ユーザー": "AI_counselor/avatars/user.png",
+    "ゆかり": "AI_counselor/avatars/yukari.png",
+    "しんや": "AI_counselor/avatars/shinya.png",
+    "みのる": "AI_counselor/avatars/minoru.png",
+    "新キャラクター": "AI_counselor/avatars/new_character.png"
+}
+
     }
-    # 各キャラクターのスタイル（背景色、配置）
     style_map = {
         "ユーザー": {"bg": "#E0FFFF", "align": "right"},
         "ゆかり": {"bg": "#FFB6C1", "align": "left"},
@@ -153,14 +170,12 @@ def display_chat_log(chat_log: list):
         "みのる": {"bg": "#90EE90", "align": "left"},
         "新キャラクター": {"bg": "#FFFACD", "align": "left"}
     }
-    # 各メッセージを自作のHTMLで表示
     for msg in chat_log:
         sender = msg["sender"]
         text = msg["message"]
         avatar = avatar_map.get(sender, "")
         style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
         if sender == "ユーザー":
-            # 右側に表示（ユーザーはアバターは右側）
             html_content = f"""
             <div style="display: flex; justify-content: flex-end; align-items: center; margin: 5px 0;">
                 <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px; margin-right: 10px;">
@@ -170,7 +185,6 @@ def display_chat_log(chat_log: list):
             </div>
             """
         else:
-            # 左側に表示
             html_content = f"""
             <div style="display: flex; justify-content: flex-start; align-items: center; margin: 5px 0;">
                 <img src="{avatar}" style="width:40px; height:40px; border-radius:50%; margin-right: 10px;">
