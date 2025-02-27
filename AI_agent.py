@@ -152,8 +152,8 @@ def display_chat_log(chat_log: list):
     会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
     最新の発言が入力バーの直上に表示されます。
     """
-    # GitHub リポジトリ内の画像フォルダのパスに合わせる
     avatar_map = {
+        # AI_agent_V3.0 ディレクトリ配下に avatars フォルダがある場合
         "ユーザー": "AI_agent_V3.0/avatars/user.png",
         "ゆかり": "AI_agent_V3.0/avatars/yukari.png",
         "しんや": "AI_agent_V3.0/avatars/shinya.png",
@@ -199,6 +199,23 @@ if "chat_log" not in st.session_state:
     st.session_state["chat_log"] = []
 
 # ------------------------
+# 最初の会話を強制生成（まだ会話がない場合）
+# ------------------------
+if "initialized" not in st.session_state:
+    st.session_state["initialized"] = True
+    if len(st.session_state["chat_log"]) == 0:
+        # 初回強制的に会話を生成
+        persona_params = adjust_parameters("はじめまして。")
+        discussion = generate_discussion("はじめまして。", persona_params)
+        for line in discussion.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                sender = parts[0]
+                message_text = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state["chat_log"].append({"sender": sender, "message": message_text})
+
+# ------------------------
 # 会話まとめボタン
 # ------------------------
 if st.button("会話をまとめる"):
@@ -223,6 +240,7 @@ st.markdown(
         border: 1px solid #ddd;
         border-radius: 5px;
         margin-bottom: 20px;
+        background-color: #ffffffaa;
     }
     </style>
     """,
