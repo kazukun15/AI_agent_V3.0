@@ -54,8 +54,7 @@ user_name = st.text_input("あなたの名前を入力してください", value
 # ------------------------
 # 定数／設定
 # ------------------------
-# ※ .streamlit/secrets.toml に [general] api_key="..." が定義されている前提
-API_KEY = st.secrets["general"]["api_key"]
+API_KEY = st.secrets["general"]["api_key"]  # .streamlit/secrets.toml で設定
 MODEL_NAME = "gemini-2.0-flash-001"         # 必要に応じて変更
 CHAR_NAMES = ["ゆかり", "しんや", "みのる"]
 
@@ -87,8 +86,8 @@ avatar_dict = {
 # ------------------------
 def analyze_question(question: str) -> int:
     """
-    ユーザの発言から感情スコアを算出する例。
-    キーワードによりスコアを上下させる。
+    ユーザの発言から感情スコアを算出している例。
+    ポジティブ要素ならスコアプラス、ロジカルな要素ならマイナス...など用途に応じて調整。
     """
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -103,12 +102,15 @@ def analyze_question(question: str) -> int:
 
 def adjust_parameters(question: str) -> dict:
     """
-    感情スコアに応じ、キャラクターの応答スタイルを変化させる例。
+    感情スコアに応じて、それぞれのキャラクターの"性格・口調"を変える例。
     """
     score = analyze_question(question)
     params = {}
     # ゆかり: 常に明るくはっちゃけた
-    params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
+    params["ゆかり"] = {
+        "style": "明るくはっちゃけた", 
+        "detail": "楽しい雰囲気で元気な回答"
+    }
     # しんや & みのる はスコアで分岐
     if score > 0:
         params["しんや"] = {"style": "共感的", "detail": "心情を重視した解説"}
@@ -120,8 +122,8 @@ def adjust_parameters(question: str) -> dict:
 
 def remove_json_artifacts(text: str) -> str:
     """
-    不要なJSON部分などを除去するための処理。
-    必要に応じて使ってください。
+    余計なJSON表現などを除去するための例。
+    必要に応じて調整可。
     """
     if not isinstance(text, str):
         text = str(text) if text else ""
@@ -131,7 +133,7 @@ def remove_json_artifacts(text: str) -> str:
 
 def call_gemini_api(prompt: str) -> str:
     """
-    ダミーでなく、実際にGemini(API)を呼び出す実装。
+    GeminiのAPIをコールし、生成結果をテキストで返す。
     """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -150,11 +152,9 @@ def call_gemini_api(prompt: str) -> str:
         candidates = rjson.get("candidates", [])
         if not candidates:
             return "回答が見つかりませんでした。(candidatesが空)"
-
         candidate0 = candidates[0]
         content_val = candidate0.get("content", "")
         if isinstance(content_val, dict):
-            # もし content が parts: [...] の形なら、それらを連結する
             parts = content_val.get("parts", [])
             content_str = " ".join([p.get("text", "") for p in parts])
         else:
@@ -172,13 +172,15 @@ def call_gemini_api(prompt: str) -> str:
 def generate_three_person_conversation(user_input: str, entire_conversation: str) -> str:
     """
     毎回のユーザー発言を受けて、3人の会話を生成する。
-    - entire_conversation: これまでの会話 (全員の発言) を文字列で保持
+    - entire_conversation: これまでの会話 (全員の発言) をテキストで保持
     """
-    # パラメータを生成
+    # 今回の発言からパラメータを生成
     persona_params = adjust_parameters(user_input)
+
+    # current_user (ユーザー名) はUIから入力済み
     current_user_name = st.session_state.get("user_name", "ユーザー")
 
-    # 実際のプロンプト
+    # ここで実際のプロンプトを組み立てる
     prompt = f"ユーザー({current_user_name})の最新メッセージ: {user_input}\n\n"
     prompt += "これまでの会話:\n" + entire_conversation + "\n\n"
 
@@ -186,7 +188,7 @@ def generate_three_person_conversation(user_input: str, entire_conversation: str
     for name, detail in persona_params.items():
         style = detail["style"]
         extra = detail["detail"]
-        prompt += f"{name}は【{style}】で、{extra}。\n"
+        prompt += f"{name}は【{style}】性格で、{extra}。\n"
 
     prompt += (
         "\n以上を踏まえ、3人がそれぞれの視点で連続して発言してください。\n"
@@ -199,17 +201,30 @@ def generate_three_person_conversation(user_input: str, entire_conversation: str
 
     return call_gemini_api(prompt)
 
+def generate_summary(entire_conversation: str) -> str:
+    """
+    会話全体を要約する。
+    """
+    prompt = (
+        "以下は3人の会話内容です。\n" + entire_conversation + "\n\n" +
+        "この内容を踏まえて、ユーザーに向けたまとめ回答を生成してください。\n"
+        "自然な日本語文で出力し、余計なJSON形式は不要です。"
+    )
+    return call_gemini_api(prompt)
+
 def display_line_style(text: str):
     """
-    吹き出しスタイルで会話を表示する。
+    各発言をキャラクターごとの背景色と文字色で吹き出し表示する。
     """
     lines = text.split("\n")
-    lines = [line.strip() for line in lines if line.strip()]  # 空行除外
+    lines = [line.strip() for line in lines if line.strip()]  # 空行除去
 
+    # 上から古い発言、下が最新発言
     color_map = {
         "ゆかり": {"bg": "#FFD1DC", "color": "#000"},
         "しんや": {"bg": "#D1E8FF", "color": "#000"},
-        "みのる": {"bg": "#D1FFD1", "color": "#000"}
+        "みのる": {"bg": "#D1FFD1", "color": "#000"},
+        # 該当しないキャラはデフォルト
     }
 
     for line in lines:
@@ -239,10 +254,25 @@ def display_line_style(text: str):
         st.markdown(bubble_html, unsafe_allow_html=True)
 
 # ------------------------
-# セッション初期化
+# セッションステート初期化
 # ------------------------
 if "discussion" not in st.session_state:
     st.session_state["discussion"] = ""
+
+if "summary" not in st.session_state:
+    st.session_state["summary"] = ""
+
+# ------------------------
+# 「会話をまとめる」ボタン
+# ------------------------
+st.write("---")
+if st.button("会話をまとめる"):
+    if st.session_state["discussion"]:
+        summary = generate_summary(st.session_state["discussion"])
+        st.session_state["summary"] = summary
+        st.markdown("### まとめ回答\n" + "**まとめ:** " + summary)
+    else:
+        st.warning("まだ会話がありません。")
 
 # ------------------------
 # 入力フォーム
@@ -251,31 +281,35 @@ st.write("---")
 st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
 with st.form("chat_form", clear_on_submit=True):
     user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=80)
+    # ボタン
     send_button = st.form_submit_button("送信")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------------
-# 送信ボタン押下時
-# ------------------------
+# 送信ボタンが押されたとき
 if send_button:
     if user_input.strip():
-        # Gemini API呼び出し
+        # Gemini APIを呼び出し、3人の会話を生成
         new_response = generate_three_person_conversation(user_input, st.session_state["discussion"])
 
-        # デバッグ出力（必要に応じてコメントアウト可能）
+        # デバッグ表示（必要であればコメントアウト可）
         st.write("**[DEBUG] AI応答**")
         st.write(new_response)
 
-        # 空応答やエラー表示
+        # 応答が空の場合の警告
         if not new_response.strip():
             st.warning("AI応答が空でした。")
         elif "エラー:" in new_response or "回答が見つかりません" in new_response:
             st.warning(f"AIがエラーまたは無回答を返しました:\n{new_response}")
 
-        # 今回の結果を会話ログに追加
-        # （ユーザ発言も保存したい場合は、下記のように自由に追記してください）
+        # 会話ログに追記
+        # ここではユーザ発言も保存したい場合、好きなフォーマットでどうぞ
+        # 例: 「ユーザー: ...」 を入れたい場合は以下を追加
         # st.session_state["discussion"] += f"\nユーザー: {user_input}"
+        # ただし display_line_style で正規表現がマッチしないので表示はお好みで
+
+        # 3人の応答だけを必ず会話ログに追記
         st.session_state["discussion"] += "\n" + new_response
+
     else:
         st.warning("発言を入力してください。")
 
@@ -289,3 +323,10 @@ if st.session_state["discussion"]:
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------
+# まとめ表示（ある場合のみ）
+# ------------------------
+if st.session_state["summary"]:
+    st.markdown("### まとめ回答")
+    st.write(st.session_state["summary"])
