@@ -1,5 +1,4 @@
 import streamlit as st
-import requests
 import re
 import random
 from PIL import Image
@@ -35,7 +34,7 @@ st.markdown(
 )
 
 # ------------------------
-# ユーザーの名前入力（上部）
+# ユーザーの名前入力
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
@@ -61,13 +60,10 @@ NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 # ------------------------
 if "chat_log" not in st.session_state:
     st.session_state["chat_log"] = []
-if "initialized" not in st.session_state:
-    st.session_state["initialized"] = False
 
 # ------------------------
 # アイコン画像の読み込み
 # ------------------------
-# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" としてください。
 try:
     img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
@@ -108,8 +104,9 @@ def analyze_question(question: str) -> int:
 
 def adjust_parameters(question: str) -> dict:
     score = analyze_question(question)
-    params = {}
-    params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
+    params = {
+        YUKARI_NAME: {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
+    }
     if score > 0:
         params[SHINYA_NAME] = {"style": "共感的", "detail": "心情を重視した解説"}
         params[MINORU_NAME] = {"style": "柔軟", "detail": "状況に合わせた多面的な視点"}
@@ -117,13 +114,6 @@ def adjust_parameters(question: str) -> dict:
         params[SHINYA_NAME] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
         params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な視点からの考察"}
     return params
-
-def remove_json_artifacts(text: str) -> str:
-    if not isinstance(text, str):
-        text = str(text) if text else ""
-    pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
-    cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
-    return cleaned.strip()
 
 def call_gemini_api(prompt: str) -> str:
     # 実際には Gemini API を呼び出す処理を記述します
@@ -177,9 +167,8 @@ def generate_new_character() -> tuple:
 
 def display_chat_log(chat_log: list):
     """
-    chat_log の各メッセージを、各キャラクターのアバター画像を横に表示する形で、
-    会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
-    最新の発言が入力バーの直上に表示されます。
+    chat_log の各メッセージを、各キャラクターのアバター画像とともに表示します。
+    最新の発言が入力バーの直上に表示されるよう、上から下に向かって追加されます。
     """
     avatar_map = {
         USER_NAME: "avatars/user.png",
@@ -223,24 +212,6 @@ def display_chat_log(chat_log: list):
         st.markdown(html_content, unsafe_allow_html=True)
 
 # ------------------------
-# 初回会話の自動生成（会話ログが空の場合）
-# ------------------------
-if not st.session_state.get("initialized", False):
-    st.session_state["initialized"] = True
-    if len(st.session_state["chat_log"]) == 0:
-        first_user_msg = "はじめまして。"
-        st.session_state["chat_log"].append({"name": USER_NAME, "msg": first_user_msg})
-        persona_params = adjust_parameters(first_user_msg)
-        discussion = generate_discussion(first_user_msg, persona_params)
-        for line in discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                sender = parts[0]
-                message_text = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-
-# ------------------------
 # 会話ログの表示（上部：スクロール可能な領域）
 # ------------------------
 st.markdown(
@@ -274,18 +245,23 @@ st.header("発言バー")
 user_msg = st.chat_input("ここにメッセージを入力")
 
 if user_msg:
+    # ユーザーの発言を保存して表示
     st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_msg})
     with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
         st.write(user_msg)
-    # 友達の応答生成（ダミーAPI呼び出し）
-    # 初回以降は continue_discussion を利用、初回は generate_discussion
+
+    # 友達の応答生成（ダミー API 呼び出し）
     if len(st.session_state["chat_log"]) == 1:
         persona_params = adjust_parameters(user_msg)
         discussion = generate_discussion(user_msg, persona_params)
     else:
-        discussion = continue_discussion(user_msg, "\n".join(
-            [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]]
-        ))
+        history = "\n".join(
+            f'{chat["name"]}: {chat["msg"]}'
+            for chat in st.session_state["chat_log"]
+            if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+        )
+        discussion = continue_discussion(user_msg, history)
+
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
