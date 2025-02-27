@@ -136,7 +136,7 @@ def display_chat_log(chat_log: list):
     """
     chat_log の各メッセージをLINE風のバブルチャットとして表示する。
     ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
-    会話履歴は古いものが上部、最新が下部に表示され、入力バーの近くに最新発言が表示されます。
+    会話は古いものが上部、最新が下部に表示され、入力バーの直上に最新の発言が表示されます。
     """
     icon_map = {
         "ユーザー": "🙂",
@@ -153,7 +153,6 @@ def display_chat_log(chat_log: list):
         "新キャラクター": {"bg": "#FFFACD", "align": "left"}
     }
     from streamlit_chat import message as st_message
-    # ここは古い順で表示（最新の発言が入力エリア近くに来る）
     for msg in chat_log:
         sender = msg["sender"]
         text = msg["message"]
