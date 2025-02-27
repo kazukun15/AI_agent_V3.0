@@ -269,4 +269,8 @@ if user_msg:
             sender = parts[0]
             message_text = parts[1].strip() if len(parts) > 1 else ""
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-    st.experimental_rerun()
+    try:
+        st.experimental_rerun()
+    except AttributeError:
+        # st.experimental_rerun() が存在しない環境の場合は何もしない
+        pass
