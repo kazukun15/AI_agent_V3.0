@@ -53,7 +53,7 @@ NEW_CHAR_NAME = "新キャラクター"
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
 
 # ------------------------
 # セッション初期化
@@ -113,6 +113,8 @@ def adjust_parameters(question: str) -> dict:
     else:
         params[SHINYA_NAME] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
         params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な視点からの考察"}
+    # 新キャラクターには独創的な視点を付与
+    params[NEW_CHAR_NAME] = {"style": "独創的", "detail": "自由な発想で意見を述べる"}
     return params
 
 def call_gemini_api(prompt: str) -> str:
@@ -125,11 +127,12 @@ def generate_discussion(question: str, persona_params: dict) -> str:
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
     prompt += (
-        "\n上記情報を元に、3人が友達同士のように自然な会話をしてください。\n"
+        "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通りです。\n"
         f"{YUKARI_NAME}: 発言内容\n"
         f"{SHINYA_NAME}: 発言内容\n"
         f"{MINORU_NAME}: 発言内容\n"
+        f"{NEW_CHAR_NAME}: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
@@ -138,18 +141,19 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
-        "上記を踏まえ、3人がさらに自然な会話を続けてください。\n"
+        "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
         "出力形式は以下の通りです。\n"
         f"{YUKARI_NAME}: 発言内容\n"
         f"{SHINYA_NAME}: 発言内容\n"
         f"{MINORU_NAME}: 発言内容\n"
+        f"{NEW_CHAR_NAME}: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
 def generate_summary(discussion: str) -> str:
     prompt = (
-        "以下は3人の会話内容です。\n" + discussion + "\n\n" +
+        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
@@ -258,7 +262,7 @@ if user_msg:
         history = "\n".join(
             f'{chat["name"]}: {chat["msg"]}'
             for chat in st.session_state["chat_log"]
-            if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+            if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
         )
         discussion = continue_discussion(user_msg, history)
 
@@ -272,5 +276,4 @@ if user_msg:
     try:
         st.experimental_rerun()
     except AttributeError:
-        # st.experimental_rerun() が存在しない環境の場合は何もしない
         pass
