@@ -3,7 +3,7 @@ import requests
 import re
 import random
 from PIL import Image
-from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+from streamlit_chat import message
 
 # ------------------------
 # ページ設定
@@ -52,9 +52,9 @@ NEW_CHAR_NAME = "新キャラクター"
 # ------------------------
 # AI設定（APIキーなど）
 # ------------------------
-# ここで secrets を参照しますが、未定義の場合はエラーになりますのでご注意ください。
-# 必要な場合は try-except や環境変数等で代替してください。
-API_KEY = st.secrets["general"]["api_key"]
+# バージョンや設定によっては st.secrets が使えない場合もあるので注意。
+# ここでは一旦 placeholder 的に書いてます。
+# API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
 
 # ------------------------
@@ -125,10 +125,13 @@ def remove_json_artifacts(text: str) -> str:
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
+# ダミーで「キャラ名: 発言」形式を返すよう変更
 def call_gemini_api(prompt: str) -> str:
-    # 実際には Gemini API を呼び出す処理を記述します
-    # 現状はテスト用ダミー
-    return f"{prompt[:20]} ...（応答）"
+    return (
+        f"{YUKARI_NAME}: やっほー、今日も元気？\n"
+        f"{SHINYA_NAME}: こんにちは。調子どうかな？\n"
+        f"{MINORU_NAME}: みんな揃ったし、雑談しようよ！"
+    )
 
 def generate_discussion(question: str, persona_params: dict) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
@@ -177,7 +180,7 @@ def generate_new_character() -> tuple:
     return random.choice(candidates)
 
 # ------------------------
-# 「はじめまして」などのダミー会話挿入は削除済み
+# 「はじめまして」等のダミー生成は一切しない
 # ------------------------
 
 # ------------------------
@@ -201,24 +204,21 @@ st.header("発言バー")
 user_msg = st.chat_input("ここにメッセージを入力")
 
 if user_msg:
-    # 1) ユーザーの発言を会話ログへ追加
     st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_msg})
     with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
         st.write(user_msg)
 
-    # 2) AI応答生成
     if len(st.session_state["chat_log"]) == 1:
         persona_params = adjust_parameters(user_msg)
         discussion = generate_discussion(user_msg, persona_params)
     else:
-        # 既存のキャラクター同士の発言のみをまとめてテキストにして渡す
         existing_dialog = "\n".join(
             f'{c["name"]}: {c["msg"]}' for c in st.session_state["chat_log"]
             if c["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
         )
         discussion = continue_discussion(user_msg, existing_dialog)
 
-    # 3) 生成結果を解析してチャットログに追加
+    # AIからの返却テキストをパースしてログに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -227,7 +227,4 @@ if user_msg:
             message_text = parts[1].strip() if len(parts) > 1 else ""
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
-    # 表示更新
-    # --- 下記を削除またはコメントアウト ---
-    # st.experimental_rerun()
-    # ------------------------------------
+    # st.experimental_rerun() は削除
