@@ -134,17 +134,18 @@ def generate_new_character() -> tuple:
 
 def display_chat_log(chat_log: list):
     """
-    chat_log の各メッセージをLINE風のバブルチャットとして表示する。
-    ユーザーの発言は右寄せ、友達の発言は左寄せ、各キャラクターには固有のアイコンと背景色を適用します。
-    会話は古いものが上部、最新が下部に表示され、入力バーの直上に最新の発言が表示されます。
+    chat_log の各メッセージを、キャラクターごとのアバターと共に、会話履歴エリアに表示する。
+    会話は古いものが上部、最新のものが下部に表示され、最新発言が入力バーに近い位置に来ます。
     """
-    icon_map = {
-        "ユーザー": "🙂",
-        "ゆかり": "🌸",
-        "しんや": "🌊",
-        "みのる": "🍀",
-        "新キャラクター": "⭐"
+    # 各キャラクターのアバター画像（例: 画像URLを適宜変更してください）
+    avatar_map = {
+        "ユーザー": "https://i.imgur.com/4KXjE3C.png",
+        "ゆかり": "https://i.imgur.com/1YzX0Gz.png",
+        "しんや": "https://i.imgur.com/EXAMPLE1.png",
+        "みのる": "https://i.imgur.com/EXAMPLE2.png",
+        "新キャラクター": "https://i.imgur.com/EXAMPLE3.png"
     }
+    # 各キャラクターのスタイル（背景色、配置）
     style_map = {
         "ユーザー": {"bg": "#E0FFFF", "align": "right"},
         "ゆかり": {"bg": "#FFB6C1", "align": "left"},
@@ -152,16 +153,33 @@ def display_chat_log(chat_log: list):
         "みのる": {"bg": "#90EE90", "align": "left"},
         "新キャラクター": {"bg": "#FFFACD", "align": "left"}
     }
-    from streamlit_chat import message as st_message
+    # 各メッセージを自作のHTMLで表示
     for msg in chat_log:
         sender = msg["sender"]
         text = msg["message"]
-        icon = icon_map.get(sender, "")
+        avatar = avatar_map.get(sender, "")
         style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
         if sender == "ユーザー":
-            st_message(f"{icon} {text}", is_user=True, key=sender+str(random.random()))
+            # 右側に表示（ユーザーはアバターは右側）
+            html_content = f"""
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin: 5px 0;">
+                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px; margin-right: 10px;">
+                    {text}
+                </div>
+                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%;">
+            </div>
+            """
         else:
-            st_message(f"{icon} {sender}: {text}", is_user=False, key=sender+str(random.random()))
+            # 左側に表示
+            html_content = f"""
+            <div style="display: flex; justify-content: flex-start; align-items: center; margin: 5px 0;">
+                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%; margin-right: 10px;">
+                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px;">
+                    {sender}: {text}
+                </div>
+            </div>
+            """
+        st.markdown(html_content, unsafe_allow_html=True)
 
 # ------------------------
 # セッションステートの初期化
