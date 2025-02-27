@@ -12,7 +12,7 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
 # ------------------------
-# 背景画像・スタイル（オプション）
+# 背景・スタイル（オプション）
 # ------------------------
 st.markdown(
     """
@@ -40,7 +40,7 @@ st.markdown(
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
 # ------------------------
-# 定数／キャラクター名設定
+# キャラクター名定義
 # ------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
@@ -48,27 +48,25 @@ YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ------------------------
 # AI設定（APIキーなど）
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
+MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
 
 # ------------------------
 # セッション初期化
 # ------------------------
 if "chat_log" not in st.session_state:
     st.session_state["chat_log"] = []
-
 if "initialized" not in st.session_state:
     st.session_state["initialized"] = False
 
 # ------------------------
 # アイコン画像の読み込み
 # ------------------------
-# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" としてください。
+# ※メインファイルが AI_agent_V3.0 内にある場合、パスは "avatars/xxx.png" に変更してください。
 try:
     img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
@@ -89,13 +87,12 @@ avatar_img_dict = {
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
     NEW_CHAR_NAME: img_newchar,
-    ASSISTANT_NAME: "🤖",  # 絵文字で代用
+    ASSISTANT_NAME: "🤖",  # アシスタントは絵文字で代用
 }
 
 # ------------------------
-# 会話生成関連関数
+# 会話生成関数（実際のAPI呼び出しがあればそちらを使用）
 # ------------------------
-
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -127,9 +124,10 @@ def remove_json_artifacts(text: str) -> str:
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
-# 本来はAPI呼び出しですが、ここではダミーの固定応答を返します。
 def call_gemini_api(prompt: str) -> str:
-    return f"{prompt[:20]} ...（固定応答）"
+    # 実際には Gemini API を呼び出す処理を記述します
+    # ここでは例としてプロンプトの一部を返すだけにしています
+    return f"{prompt[:20]} ...（応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
@@ -162,7 +160,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は3人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
@@ -177,56 +175,8 @@ def generate_new_character() -> tuple:
     ]
     return random.choice(candidates)
 
-def display_chat_log(chat_log: list):
-    """
-    chat_log の各メッセージを、各キャラクターのアバター画像を横に表示する形で、
-    会話履歴エリアに表示します。会話は古いものが上、最新が下に表示され、
-    最新の発言が入力バーの直上に表示されます。
-    """
-    # GitHubリポジトリ内のパスに合わせる
-    avatar_map = {
-        USER_NAME: "avatars/user.png",
-        YUKARI_NAME: "avatars/yukari.png",
-        SHINYA_NAME: "avatars/shinya.png",
-        MINORU_NAME: "avatars/minoru.png",
-        NEW_CHAR_NAME: "avatars/new_character.png",
-        ASSISTANT_NAME: "🤖"
-    }
-    style_map = {
-        USER_NAME: {"bg": "#E0FFFF", "align": "right"},
-        YUKARI_NAME: {"bg": "#FFB6C1", "align": "left"},
-        SHINYA_NAME: {"bg": "#ADD8E6", "align": "left"},
-        MINORU_NAME: {"bg": "#90EE90", "align": "left"},
-        NEW_CHAR_NAME: {"bg": "#FFFACD", "align": "left"},
-        ASSISTANT_NAME: {"bg": "#F0F0F0", "align": "left"}
-    }
-    for msg in chat_log:
-        sender = msg.get("name", "不明")
-        text = msg.get("msg", "")
-        avatar = avatar_map.get(sender, "")
-        style = style_map.get(sender, {"bg": "#F5F5F5", "align": "left"})
-        if sender == USER_NAME:
-            html_content = f"""
-            <div style="display: flex; justify-content: flex-end; align-items: center; margin: 5px 0;">
-                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px; margin-right: 10px;">
-                    {text}
-                </div>
-                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%;">
-            </div>
-            """
-        else:
-            html_content = f"""
-            <div style="display: flex; justify-content: flex-start; align-items: center; margin: 5px 0;">
-                <img src="{avatar}" style="width:40px; height:40px; border-radius:50%; margin-right: 10px;">
-                <div style="max-width: 70%; background-color: {style['bg']}; border: 1px solid #ddd; border-radius: 10px; padding: 8px;">
-                    {sender}: {text}
-                </div>
-            </div>
-            """
-        st.markdown(html_content, unsafe_allow_html=True)
-
 # ------------------------
-# 初回会話の自動生成（まだ会話がない場合）
+# 初回会話の自動生成（会話ログが空の場合）
 # ------------------------
 if not st.session_state.get("initialized", False):
     st.session_state["initialized"] = True
@@ -244,95 +194,44 @@ if not st.session_state.get("initialized", False):
                 st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
 # ------------------------
-# 会話まとめボタン
+# 会話ログの表示
 # ------------------------
-if st.button("会話をまとめる"):
-    if st.session_state["chat_log"]:
-        all_discussion = "\n".join([f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"]])
-        summary = generate_summary(all_discussion)
-        st.session_state["summary"] = summary
-        st.markdown("### まとめ回答\n" + "**まとめ:** " + summary)
-    else:
-        st.warning("まずは会話を開始してください。")
-
-# ------------------------
-# 上部：会話履歴表示エリア（スクロール可能）
-# ------------------------
-st.markdown(
-    """
-    <style>
-    .chat-container {
-        max-height: 600px;
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        background-color: #ffffffaa;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 st.header("会話履歴")
 st.markdown('<div class="chat-container" id="chat-container">', unsafe_allow_html=True)
 if st.session_state["chat_log"]:
-    display_chat_log(st.session_state["chat_log"])
+    for chat in st.session_state["chat_log"]:
+        avatar = avatar_img_dict.get(chat.get("name"), None)
+        with st.chat_message(chat.get("name"), avatar=avatar):
+            st.write(chat.get("msg"))
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------
-# 下部：発言入力エリア（別枠）
+# 発言入力
 # ------------------------
 st.header("発言バー")
-with st.form("chat_form", clear_on_submit=True):
-    user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=80, key="user_input")
-    col1, col2 = st.columns(2)
-    with col1:
-        send_button = st.form_submit_button("送信")
-    with col2:
-        continue_button = st.form_submit_button("続きを話す")
+user_msg = st.chat_input("ここにメッセージを入力")
 
-if send_button:
-    if user_input.strip():
-        st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_input})
-        if len(st.session_state["chat_log"]) == 1:
-            persona_params = adjust_parameters(user_input)
-            discussion = generate_discussion(user_input, persona_params)
-            for line in discussion.split("\n"):
-                line = line.strip()
-                if line:
-                    parts = line.split(":", 1)
-                    sender = parts[0]
-                    message_text = parts[1].strip() if len(parts) > 1 else ""
-                    st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-        else:
-            new_discussion = continue_discussion(user_input, "\n".join(
-                [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in NAMES]
-            ))
-            for line in new_discussion.split("\n"):
-                line = line.strip()
-                if line:
-                    parts = line.split(":", 1)
-                    sender = parts[0]
-                    message_text = parts[1].strip() if len(parts) > 1 else ""
-                    st.session_state["chat_log"].append({"name": sender, "msg": message_text})
+if user_msg:
+    st.session_state["chat_log"].append({"name": USER_NAME, "msg": user_msg})
+    with st.chat_message(USER_NAME, avatar=avatar_img_dict.get(USER_NAME)):
+        st.write(user_msg)
+    # 応答生成
+    if len(st.session_state["chat_log"]) == 1:
+        persona_params = adjust_parameters(user_msg)
+        discussion = generate_discussion(user_msg, persona_params)
     else:
-        st.warning("発言を入力してください。")
-
-if continue_button:
-    if st.session_state["chat_log"]:
-        default_input = "続きをお願いします。"
-        new_discussion = continue_discussion(default_input, "\n".join(
-            [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in NAMES]
+        discussion = continue_discussion(user_msg, "\n".join(
+            [f'{chat["name"]}: {chat["msg"]}' for chat in st.session_state["chat_log"] if chat["name"] in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]]
         ))
-        for line in new_discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                sender = parts[0]
-                message_text = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state["chat_log"].append({"name": sender, "msg": message_text})
-    else:
-        st.warning("まずは会話を開始してください。")
+    # 生成結果を解析してチャットログに追加
+    for line in discussion.split("\n"):
+        line = line.strip()
+        if line:
+            parts = line.split(":", 1)
+            sender = parts[0]
+            message_text = parts[1].strip() if len(parts) > 1 else ""
+            st.session_state["chat_log"].append({"name": sender, "msg": message_text})
+    # 表示更新
+    st.experimental_rerun()
