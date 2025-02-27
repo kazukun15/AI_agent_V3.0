@@ -52,6 +52,8 @@ NEW_CHAR_NAME = "新キャラクター"
 # ------------------------
 # AI設定（APIキーなど）
 # ------------------------
+# ここで secrets を参照しますが、未定義の場合はエラーになりますのでご注意ください。
+# 必要な場合は try-except や環境変数等で代替してください。
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
 
@@ -90,7 +92,7 @@ avatar_img_dict = {
 }
 
 # ------------------------
-# 会話生成関数（実際のAPI呼び出しがあればそちらを使用）
+# 会話生成用の各種関数
 # ------------------------
 def analyze_question(question: str) -> int:
     score = 0
@@ -125,7 +127,7 @@ def remove_json_artifacts(text: str) -> str:
 
 def call_gemini_api(prompt: str) -> str:
     # 実際には Gemini API を呼び出す処理を記述します
-    # ここでは例としてプロンプトの一部を返すだけ
+    # 現状はテスト用ダミー
     return f"{prompt[:20]} ...（応答）"
 
 def generate_discussion(question: str, persona_params: dict) -> str:
@@ -175,8 +177,7 @@ def generate_new_character() -> tuple:
     return random.choice(candidates)
 
 # ------------------------
-# ★★ 「はじめまして」ダミーを生成する処理を削除 ★★
-#     （ st.session_state["chat_log"] が空でも自動挿入しない ）
+# 「はじめまして」などのダミー会話挿入は削除済み
 # ------------------------
 
 # ------------------------
@@ -227,4 +228,6 @@ if user_msg:
             st.session_state["chat_log"].append({"name": sender, "msg": message_text})
 
     # 表示更新
-    st.experimental_rerun()
+    # --- 下記を削除またはコメントアウト ---
+    # st.experimental_rerun()
+    # ------------------------------------
