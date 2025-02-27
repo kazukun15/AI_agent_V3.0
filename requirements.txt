@@ -1,3 +1,4 @@
 streamlit
 requests
 streamlit-chat
+google-generative-ai
