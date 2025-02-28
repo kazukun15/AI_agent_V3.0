@@ -92,7 +92,7 @@ avatar_img_dict = {
 }
 
 # ------------------------
-# Gemini API 呼び出し関数
+# Gemini API 呼び出し関数（requests を使用）
 # ------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
