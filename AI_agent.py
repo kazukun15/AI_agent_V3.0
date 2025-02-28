@@ -10,7 +10,7 @@ from streamlit_chat import message  # streamlit-chat のメッセージ表示用
 # ページ設定
 # ------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V2.2.1")
+st.title("ぼくのともだち V3.0")
 
 # ------------------------
 # 背景・共通スタイルの設定
