@@ -31,6 +31,21 @@ st.markdown(
         margin-bottom: 20px;
         background-color: #ffffffaa;
     }
+    /* バブルチャット用のスタイル */
+    .chat-bubble {
+        background-color: #d4f7dc;
+        border-radius: 10px;
+        padding: 8px;
+        display: inline-block;
+        max-width: 80%;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        margin: 4px 0;
+    }
+    .chat-header {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -213,15 +228,20 @@ def generate_summary(discussion: str) -> str:
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
-    # ユーザーの場合は st.text_input で入力された名前を表示、それ以外は role 名を表示
     display_name = user_name if role == "user" else role
+    # ユーザーの発言は右寄せ、その他は左寄せ
     if role == "user":
-        # ユーザーの発言を右寄せするために div でラップ
         with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-            st.markdown(f'<div style="text-align: right;"><strong>{display_name}</strong><br>{content}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                unsafe_allow_html=True,
+            )
     else:
         with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-            st.markdown(f"**{display_name}**<br>{content}", unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                unsafe_allow_html=True,
+            )
 
 # ------------------------
 # ユーザー入力の取得（st.chat_input）
@@ -230,7 +250,10 @@ user_input = st.chat_input("何か質問や話したいことがありますか�
 if user_input:
     # ユーザーの発言を右寄せで表示＆履歴に追加
     with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-        st.markdown(f'<div style="text-align: right;"><strong>{user_name}</strong><br>{user_input}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
+            unsafe_allow_html=True,
+        )
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     # 会話生成
@@ -256,7 +279,13 @@ if user_input:
             display_name = user_name if role == "user" else role
             if role == "user":
                 with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                    st.markdown(f'<div style="text-align: right;"><strong>{display_name}</strong><br>{content}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                        unsafe_allow_html=True,
+                    )
             else:
                 with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                    st.markdown(f"**{display_name}**<br>{content}", unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                        unsafe_allow_html=True,
+                    )
