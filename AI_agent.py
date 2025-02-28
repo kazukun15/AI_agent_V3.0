@@ -260,8 +260,3 @@ if user_input:
             else:
                 with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
                     st.markdown(f"**{display_name}**<br>{content}", unsafe_allow_html=True)
-    
-    try:
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"再実行時のエラー: {e}")
