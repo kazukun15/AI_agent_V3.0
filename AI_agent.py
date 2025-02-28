@@ -13,7 +13,7 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
 # ------------------------------------------------------------------
-# .streamlit/config.toml のテーマ設定読み込み（同じディレクトリの場合）
+# 同じディレクトリにある config.toml を読み込み（テーマ設定）
 # ------------------------------------------------------------------
 try:
     try:
@@ -77,17 +77,18 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザー入力
-# ------------------------------------------------------------------
-user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
-
-# ------------------------------------------------------------------
 # サイドバー：カスタム新キャラクター設定
 # ------------------------------------------------------------------
 st.sidebar.header("カスタム新キャラクター設定")
 custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
 custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+
+# ------------------------------------------------------------------
+# ユーザー入力（上部）
+# ------------------------------------------------------------------
+user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
 # キャラクター定義（固定メンバー）
@@ -100,11 +101,12 @@ MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 
 # ------------------------------------------------------------------
-# 定数／設定（APIキーなど）
+# 定数／設定（APIキー、モデル）
 # ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+# ※新キャラクターはサイドバー設定でカスタム指定があればそちらを、無ければランダム生成
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -113,7 +115,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# アイコン画像の読み込み（AI_agent_Ver2.0/avatars/ に配置）
+# アイコン画像の読み込み（AI_agent_Ver2.0/avatars/）
 # ------------------------------------------------------------------
 try:
     img_user = Image.open("avatars/user.png")
@@ -135,7 +137,7 @@ avatar_img_dict = {
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
     NEW_CHAR_NAME: img_newchar,
-    ASSISTANT_NAME: "🤖",  # 絵文字で代用
+    ASSISTANT_NAME: "🤖",
 }
 
 # ------------------------------------------------------------------
@@ -195,7 +197,6 @@ def analyze_question(question: str) -> int:
 def adjust_parameters(question: str, ai_age: int) -> dict:
     score = analyze_question(question)
     params = {}
-    # AIの年齢によるパラメータの振り分け
     if ai_age < 30:
         params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "とにかくエネルギッシュでポジティブな回答"}
         if score > 0:
@@ -223,6 +224,10 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
     return params
 
 def generate_new_character() -> tuple:
+    # サイドバーでカスタム指定があればそれを使う
+    if custom_new_char_name.strip() and custom_new_char_personality.strip():
+        return custom_new_char_name.strip(), custom_new_char_personality.strip()
+    # それ以外はランダムに選択
     candidates = [
         ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
@@ -238,12 +243,7 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    # カスタム新キャラクターが指定されていればそれを使い、無ければランダム生成
-    if custom_new_char_name.strip() and custom_new_char_personality.strip():
-        new_name = custom_new_char_name.strip()
-        new_personality = custom_new_char_personality.strip()
-    else:
-        new_name, new_personality = generate_new_character()
+    new_name, new_personality = generate_new_character()
     prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
     prompt += (
         "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
@@ -279,13 +279,6 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# サイドバー：カスタム新キャラクター設定
-# ------------------------------------------------------------------
-st.sidebar.header("カスタム新キャラクター設定")
-custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
-custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
-
-# ------------------------------------------------------------------
 # チャット履歴の表示（Databricks Q&A bot 形式）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
@@ -317,7 +310,6 @@ if user_input:
         )
     st.session_state.messages.append({"role": "user", "content": user_input})
     
-    # AIの年齢も反映してパラメータを調整
     if len(st.session_state.messages) == 1:
         persona_params = adjust_parameters(user_input, ai_age)
         discussion = generate_discussion(user_input, persona_params, ai_age)
