@@ -6,33 +6,57 @@ import json
 from PIL import Image
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
-# ------------------------
-# ページ設定
-# ------------------------
+# ------------------------------------------------------------------
+# st.set_page_config() は最初に呼び出す
+# ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
-# ------------------------
-# 背景・共通スタイルの設定
-# ------------------------
+# ------------------------------------------------------------------
+# .streamlit/config.toml のテーマ設定読み込み（同じディレクトリの場合）
+# ------------------------------------------------------------------
+try:
+    try:
+        import tomllib  # Python 3.11以降
+    except ImportError:
+        import toml as tomllib
+    with open("config.toml", "rb") as f:
+        config = tomllib.load(f)
+    theme_config = config.get("theme", {})
+    primaryColor = theme_config.get("primaryColor", "#729075")
+    backgroundColor = theme_config.get("backgroundColor", "#f1ece3")
+    secondaryBackgroundColor = theme_config.get("secondaryBackgroundColor", "#fff8ef")
+    textColor = theme_config.get("textColor", "#5e796a")
+    font = theme_config.get("font", "monospace")
+except Exception as e:
+    primaryColor = "#729075"
+    backgroundColor = "#f1ece3"
+    secondaryBackgroundColor = "#fff8ef"
+    textColor = "#5e796a"
+    font = "monospace"
+
+# ------------------------------------------------------------------
+# 背景・共通スタイルの設定（テーマ設定を反映）
+# ------------------------------------------------------------------
 st.markdown(
-    """
+    f"""
     <style>
-    body {
-        background-color: #e9edf5;
-        font-family: 'Helvetica Neue', sans-serif;
-    }
-    .chat-container {
+    body {{
+        background-color: {backgroundColor};
+        font-family: {font}, sans-serif;
+        color: {textColor};
+    }}
+    .chat-container {{
         max-height: 600px;
         overflow-y: auto;
         padding: 10px;
         border: 1px solid #ddd;
         border-radius: 5px;
         margin-bottom: 20px;
-        background-color: #ffffffaa;
-    }
+        background-color: {secondaryBackgroundColor};
+    }}
     /* バブルチャット用のスタイル */
-    .chat-bubble {
+    .chat-bubble {{
         background-color: #d4f7dc;
         border-radius: 10px;
         padding: 8px;
@@ -41,28 +65,33 @@ st.markdown(
         word-wrap: break-word;
         white-space: pre-wrap;
         margin: 4px 0;
-    }
-    .chat-header {
+    }}
+    .chat-header {{
         font-weight: bold;
         margin-bottom: 4px;
-    }
+        color: {primaryColor};
+    }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ------------------------
-# ユーザーの名前入力（上部）
-# ------------------------
+# ------------------------------------------------------------------
+# ユーザー入力
+# ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-# ------------------------
-# AIの年齢入力（上部）
-# ------------------------
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
-# ------------------------
-# キャラクター定義
-# ------------------------
+# ------------------------------------------------------------------
+# サイドバー：カスタム新キャラクター設定
+# ------------------------------------------------------------------
+st.sidebar.header("カスタム新キャラクター設定")
+custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
+custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
+
+# ------------------------------------------------------------------
+# キャラクター定義（固定メンバー）
+# ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
@@ -70,23 +99,22 @@ SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 
-# ------------------------
+# ------------------------------------------------------------------
 # 定数／設定（APIキーなど）
-# ------------------------
+# ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターは動的に決定します
 
-# ------------------------
+# ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
-# ------------------------
+# ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ------------------------
-# アイコン画像の読み込み（ファイルは AI_agent_Ver2.0/avatars/ に配置）
-# ------------------------
+# ------------------------------------------------------------------
+# アイコン画像の読み込み（AI_agent_Ver2.0/avatars/ に配置）
+# ------------------------------------------------------------------
 try:
     img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
@@ -110,9 +138,9 @@ avatar_img_dict = {
     ASSISTANT_NAME: "🤖",  # 絵文字で代用
 }
 
-# ------------------------
+# ------------------------------------------------------------------
 # Gemini API 呼び出し関数（requests 使用）
-# ------------------------
+# ------------------------------------------------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
@@ -149,9 +177,9 @@ def call_gemini_api(prompt: str) -> str:
     except Exception as e:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
-# ------------------------
+# ------------------------------------------------------------------
 # 会話生成関連関数
-# ------------------------
+# ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -210,7 +238,12 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    new_name, new_personality = generate_new_character()
+    # カスタム新キャラクターが指定されていればそれを使い、無ければランダム生成
+    if custom_new_char_name.strip() and custom_new_char_personality.strip():
+        new_name = custom_new_char_name.strip()
+        new_personality = custom_new_char_personality.strip()
+    else:
+        new_name, new_personality = generate_new_character()
     prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
     prompt += (
         "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
@@ -245,9 +278,16 @@ def generate_summary(discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-# ------------------------
+# ------------------------------------------------------------------
+# サイドバー：カスタム新キャラクター設定
+# ------------------------------------------------------------------
+st.sidebar.header("カスタム新キャラクター設定")
+custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
+custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
+
+# ------------------------------------------------------------------
 # チャット履歴の表示（Databricks Q&A bot 形式）
-# ------------------------
+# ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
@@ -265,9 +305,9 @@ for msg in st.session_state.messages:
                 unsafe_allow_html=True,
             )
 
-# ------------------------
+# ------------------------------------------------------------------
 # ユーザー入力の取得（st.chat_input）
-# ------------------------
+# ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
     with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
