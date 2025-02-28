@@ -55,6 +55,10 @@ st.markdown(
 # ユーザーの名前入力（上部）
 # ------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+# ------------------------
+# AIの年齢入力（上部）
+# ------------------------
+ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------
 # キャラクター定義
@@ -70,7 +74,7 @@ NEW_CHAR_NAME = "新キャラクター"
 # 定数／設定（APIキーなど）
 # ------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 適宜変更
+MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 # ※新キャラクターは動的に決定します
 
@@ -107,7 +111,7 @@ avatar_img_dict = {
 }
 
 # ------------------------
-# Gemini API 呼び出し関数（requests を使用）
+# Gemini API 呼び出し関数（requests 使用）
 # ------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
@@ -160,16 +164,34 @@ def analyze_question(question: str) -> int:
             score -= 1
     return score
 
-def adjust_parameters(question: str) -> dict:
+def adjust_parameters(question: str, ai_age: int) -> dict:
     score = analyze_question(question)
     params = {}
-    params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
-    if score > 0:
-        params[SHINYA_NAME] = {"style": "共感的", "detail": "心情を重視した解説"}
-        params[MINORU_NAME] = {"style": "柔軟", "detail": "状況に合わせた多面的な視点"}
+    # AIの年齢によるパラメータの振り分け
+    if ai_age < 30:
+        params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "とにかくエネルギッシュでポジティブな回答"}
+        if score > 0:
+            params[SHINYA_NAME] = {"style": "共感的", "detail": "若々しい感性で共感しながら答える"}
+            params[MINORU_NAME] = {"style": "柔軟", "detail": "自由な発想で斬新な視点から回答する"}
+        else:
+            params[SHINYA_NAME] = {"style": "分析的", "detail": "新しい視点を持ちつつ、若々しく冷静に答える"}
+            params[MINORU_NAME] = {"style": "客観的", "detail": "柔軟な思考で率直に事実を述べる"}
+    elif ai_age < 50:
+        params[YUKARI_NAME] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
+        if score > 0:
+            params[SHINYA_NAME] = {"style": "共感的", "detail": "深い理解と共感を込めた回答"}
+            params[MINORU_NAME] = {"style": "柔軟", "detail": "実務的な視点から多角的な意見を提供"}
+        else:
+            params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静な視点から根拠をもって説明する"}
+            params[MINORU_NAME] = {"style": "客観的", "detail": "理論的かつ中立的な視点で回答する"}
     else:
-        params[SHINYA_NAME] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
-        params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な視点からの考察"}
+        params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験と知識に基づいた落ち着いた回答"}
+        if score > 0:
+            params[SHINYA_NAME] = {"style": "共感的", "detail": "深い洞察と共感で優しく答える"}
+            params[MINORU_NAME] = {"style": "柔軟", "detail": "多面的な知見から慎重に意見を述べる"}
+        else:
+            params[SHINYA_NAME] = {"style": "分析的", "detail": "豊かな経験に基づいた緻密な説明"}
+            params[MINORU_NAME] = {"style": "客観的", "detail": "慎重かつ冷静に事実を丁寧に伝える"}
     return params
 
 def generate_new_character() -> tuple:
@@ -182,9 +204,10 @@ def generate_new_character() -> tuple:
     ]
     return random.choice(candidates)
 
-def generate_discussion(question: str, persona_params: dict) -> str:
+def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
+    prompt += f"このAIは{ai_age}歳として振る舞います。\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
@@ -229,7 +252,6 @@ for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
     display_name = user_name if role == "user" else role
-    # ユーザーの発言は右寄せ、その他は左寄せ
     if role == "user":
         with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
@@ -248,7 +270,6 @@ for msg in st.session_state.messages:
 # ------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # ユーザーの発言を右寄せで表示＆履歴に追加
     with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
         st.markdown(
             f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
@@ -256,10 +277,10 @@ if user_input:
         )
     st.session_state.messages.append({"role": "user", "content": user_input})
     
-    # 会話生成
+    # AIの年齢も反映してパラメータを調整
     if len(st.session_state.messages) == 1:
-        persona_params = adjust_parameters(user_input)
-        discussion = generate_discussion(user_input, persona_params)
+        persona_params = adjust_parameters(user_input, ai_age)
+        discussion = generate_discussion(user_input, persona_params, ai_age)
     else:
         history = "\n".join(
             f'{msg["role"]}: {msg["content"]}'
@@ -268,7 +289,6 @@ if user_input:
         )
         discussion = continue_discussion(user_input, history)
     
-    # 生成された応答を解析して各行ごとに履歴に追加＆表示
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
