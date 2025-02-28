@@ -77,18 +77,36 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# サイドバー：カスタム新キャラクター設定
-# ------------------------------------------------------------------
-st.sidebar.header("カスタム新キャラクター設定")
-custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
-custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
-st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
-
-# ------------------------------------------------------------------
 # ユーザー入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
+
+# ------------------------------------------------------------------
+# サイドバー：カスタム新キャラクター設定＆クイズ機能
+# ------------------------------------------------------------------
+st.sidebar.header("カスタム新キャラクター設定")
+custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
+custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
+
+st.sidebar.header("ミニゲーム／クイズ")
+# ここでクイズ用の問題集を定義
+quiz_list = [
+    {"question": "日本の首都は？", "answer": "東京"},
+    {"question": "富士山の標高は何メートル？", "answer": "3776"},
+    {"question": "寿司の主な具材は何？", "answer": "酢飯"},
+    {"question": "桜の花言葉は？", "answer": "美しさ"},
+]
+if st.sidebar.button("クイズを開始する"):
+    quiz = random.choice(quiz_list)
+    st.session_state.quiz_active = True
+    st.session_state.quiz_question = quiz["question"]
+    st.session_state.quiz_answer = quiz["answer"]
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
+
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
 # ------------------------------------------------------------------
 # キャラクター定義（固定メンバー）
@@ -104,9 +122,9 @@ NEW_CHAR_NAME = "新キャラクター"
 # 定数／設定（APIキー、モデル）
 # ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"  # 必要に応じて変更
+MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターはサイドバー設定でカスタム指定があればそちらを、無ければランダム生成
+# ※新キャラクターはサイドバー設定で指定がなければランダム
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -115,7 +133,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# アイコン画像の読み込み（AI_agent_Ver2.0/avatars/）
+# アイコン画像の読み込み（avatars/ に配置）
 # ------------------------------------------------------------------
 try:
     img_user = Image.open("avatars/user.png")
@@ -224,7 +242,7 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
     return params
 
 def generate_new_character() -> tuple:
-    # サイドバーでカスタム指定があればそれを使う
+    # サイドバーでカスタム指定があればそれを使用
     if custom_new_char_name.strip() and custom_new_char_personality.strip():
         return custom_new_char_name.strip(), custom_new_char_personality.strip()
     # それ以外はランダムに選択
@@ -279,6 +297,24 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
+# サイドバー：クイズ機能（ミニゲーム）
+# ------------------------------------------------------------------
+quiz_list = [
+    {"question": "日本の首都は？", "answer": "東京"},
+    {"question": "富士山の標高は何メートル？", "answer": "3776"},
+    {"question": "寿司の主な具材は何？", "answer": "酢飯"},
+    {"question": "桜の花言葉は？", "answer": "美しさ"}
+]
+if st.sidebar.button("クイズを開始する"):
+    quiz = random.choice(quiz_list)
+    st.session_state.quiz_active = True
+    st.session_state.quiz_question = quiz["question"]
+    st.session_state.quiz_answer = quiz["answer"]
+    st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
+
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+
+# ------------------------------------------------------------------
 # チャット履歴の表示（Databricks Q&A bot 形式）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
@@ -303,41 +339,57 @@ for msg in st.session_state.messages:
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-        st.markdown(
-            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
-            unsafe_allow_html=True,
-        )
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    
-    if len(st.session_state.messages) == 1:
-        persona_params = adjust_parameters(user_input, ai_age)
-        discussion = generate_discussion(user_input, persona_params, ai_age)
+    # クイズがアクティブなら、ユーザーの入力をクイズの回答として処理
+    if st.session_state.get("quiz_active", False):
+        # 単純に正解・不正解の判定（大文字小文字は無視）
+        if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
+            quiz_result = "正解です！おめでとうございます！"
+        else:
+            quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
+        st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
+        with st.chat_message("クイズ", avatar="❓"):
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
+                unsafe_allow_html=True,
+            )
+        st.session_state.quiz_active = False
     else:
-        history = "\n".join(
-            f'{msg["role"]}: {msg["content"]}'
-            for msg in st.session_state.messages
-            if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
-        )
-        discussion = continue_discussion(user_input, history)
-    
-    for line in discussion.split("\n"):
-        line = line.strip()
-        if line:
-            parts = line.split(":", 1)
-            role = parts[0]
-            content = parts[1].strip() if len(parts) > 1 else ""
-            st.session_state.messages.append({"role": role, "content": content})
-            display_name = user_name if role == "user" else role
-            if role == "user":
-                with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                    st.markdown(
-                        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                    st.markdown(
-                        f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
+        # 通常の会話として処理
+        with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+            st.markdown(
+                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
+                unsafe_allow_html=True,
+            )
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        
+        if len(st.session_state.messages) == 1:
+            persona_params = adjust_parameters(user_input, ai_age)
+            discussion = generate_discussion(user_input, persona_params, ai_age)
+        else:
+            history = "\n".join(
+                f'{msg["role"]}: {msg["content"]}'
+                for msg in st.session_state.messages
+                if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
+            )
+            discussion = continue_discussion(user_input, history)
+        
+        for line in discussion.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state.messages.append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
