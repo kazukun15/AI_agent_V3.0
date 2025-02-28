@@ -213,18 +213,23 @@ def generate_summary(discussion: str) -> str:
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
-    avatar = avatar_img_dict.get(role, "🤖")
-    with st.chat_message(role, avatar=avatar):
-        st.markdown(content)
+    # ユーザーの場合はst.text_inputで入力された名前を表示、それ以外はrole名をそのまま表示
+    display_name = user_name if role == "user" else role
+    if role == "user":
+        with st.chat_message(role, is_user=True, avatar=avatar_img_dict.get(USER_NAME)):
+            st.markdown(f"**{display_name}**\n{content}")
+    else:
+        with st.chat_message(role, is_user=False, avatar=avatar_img_dict.get(role, "🤖")):
+            st.markdown(f"**{display_name}**\n{content}")
 
 # ------------------------
 # ユーザー入力の取得（st.chat_input）
 # ------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # ユーザーの発言を表示＆履歴に追加
-    with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-        st.markdown(user_input)
+    # ユーザーの発言を表示＆履歴に追加（右寄せ）
+    with st.chat_message("user", is_user=True, avatar=avatar_img_dict.get(USER_NAME)):
+        st.markdown(f"**{user_name}**\n{user_input}")
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     # 会話生成
@@ -247,6 +252,15 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
-            with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                st.markdown(content)
-    st.experimental_rerun()
+            display_name = user_name if role == "user" else role
+            if role == "user":
+                with st.chat_message(role, is_user=True, avatar=avatar_img_dict.get(USER_NAME)):
+                    st.markdown(f"**{display_name}**\n{content}")
+            else:
+                with st.chat_message(role, is_user=False, avatar=avatar_img_dict.get(role, "🤖")):
+                    st.markdown(f"**{display_name}**\n{content}")
+    
+    try:
+        st.experimental_rerun()
+    except Exception as e:
+        st.error(f"再実行時のエラー: {e}")
