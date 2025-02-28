@@ -2,4 +2,3 @@ streamlit==1.42.2
 requests==2.32.3
 Pillow==11.1.0
 streamlit-chat==0.1.1
-google-generative-ai
