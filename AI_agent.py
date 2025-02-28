@@ -17,7 +17,7 @@ st.title("ぼくのともだち V3.0")
 # ------------------------------------------------------------------
 try:
     try:
-        import tomllib  # Python 3.11以降
+        import tomllib  # Python 3.11以降の場合
     except ImportError:
         import toml as tomllib
     with open("config.toml", "rb") as f:
@@ -77,9 +77,13 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザー入力（上部）
+# ユーザーの名前入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+
+# ------------------------------------------------------------------
+# AIの年齢入力（上部）
+# ------------------------------------------------------------------
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -90,20 +94,18 @@ custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（�
 custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
 
 st.sidebar.header("ミニゲーム／クイズ")
-# ここでクイズ用の問題集を定義
-quiz_list = [
-    {"question": "日本の首都は？", "answer": "東京"},
-    {"question": "富士山の標高は何メートル？", "answer": "3776"},
-    {"question": "寿司の主な具材は何？", "answer": "酢飯"},
-    {"question": "桜の花言葉は？", "answer": "美しさ"},
-]
-if st.sidebar.button("クイズを開始する"):
+# クイズ開始ボタンにユニークな key を指定
+if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
+    quiz_list = [
+        {"question": "日本の首都は？", "answer": "東京"},
+        {"question": "富士山の標高は何メートル？", "answer": "3776"},
+        {"question": "寿司の主な具材は何？", "answer": "酢飯"},
+        {"question": "桜の花言葉は？", "answer": "美しさ"}
+    ]
     quiz = random.choice(quiz_list)
     st.session_state.quiz_active = True
     st.session_state.quiz_question = quiz["question"]
     st.session_state.quiz_answer = quiz["answer"]
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
@@ -124,7 +126,7 @@ NEW_CHAR_NAME = "新キャラクター"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターはサイドバー設定で指定がなければランダム
+# ※新キャラクターはサイドバーで指定がなければランダム
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -242,10 +244,8 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
     return params
 
 def generate_new_character() -> tuple:
-    # サイドバーでカスタム指定があればそれを使用
     if custom_new_char_name.strip() and custom_new_char_personality.strip():
         return custom_new_char_name.strip(), custom_new_char_personality.strip()
-    # それ以外はランダムに選択
     candidates = [
         ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
@@ -297,24 +297,6 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# サイドバー：クイズ機能（ミニゲーム）
-# ------------------------------------------------------------------
-quiz_list = [
-    {"question": "日本の首都は？", "answer": "東京"},
-    {"question": "富士山の標高は何メートル？", "answer": "3776"},
-    {"question": "寿司の主な具材は何？", "answer": "酢飯"},
-    {"question": "桜の花言葉は？", "answer": "美しさ"}
-]
-if st.sidebar.button("クイズを開始する"):
-    quiz = random.choice(quiz_list)
-    st.session_state.quiz_active = True
-    st.session_state.quiz_question = quiz["question"]
-    st.session_state.quiz_answer = quiz["answer"]
-    st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
-
-st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
-
-# ------------------------------------------------------------------
 # チャット履歴の表示（Databricks Q&A bot 形式）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
@@ -341,7 +323,6 @@ user_input = st.chat_input("何か質問や話したいことがありますか�
 if user_input:
     # クイズがアクティブなら、ユーザーの入力をクイズの回答として処理
     if st.session_state.get("quiz_active", False):
-        # 単純に正解・不正解の判定（大文字小文字は無視）
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
             quiz_result = "正解です！おめでとうございます！"
         else:
@@ -354,7 +335,6 @@ if user_input:
             )
         st.session_state.quiz_active = False
     else:
-        # 通常の会話として処理
         with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
