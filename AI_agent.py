@@ -61,8 +61,7 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
 config_values = load_config()
-st.markdown(
-    f"""
+st.markdown(f"""
     <style>
     body {{
         background-color: {config_values['backgroundColor']};
@@ -80,7 +79,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 吹き出し（キャラクターの最新発言） - 読みやすく拡大 */
+    /* 吹き出し（キャラクターの最新発言） - 横幅300px */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
@@ -96,7 +95,7 @@ st.markdown(
     .character-image {{
         width: 120px;
     }}
-    /* スマホ向けレスポンシブ */
+    /* スマホ向けレスポンシブ設定 */
     @media only screen and (max-width: 768px) {{
         .character-container {{
             flex-direction: column;
@@ -104,9 +103,7 @@ st.markdown(
         }}
     }}
     </style>
-    """,
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 # ==========================
 # サイドバー入力（名前とAI年齢）
@@ -115,13 +112,9 @@ user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", ke
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
 st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
-# サイドバーに会話まとめボタンを追加
+# サイドバーに会話をまとめるボタンを追加
 if st.sidebar.button("会話をまとめる"):
-    history_text = "\n".join(
-        f"{msg['role']}: {msg['content']}"
-        for msg in st.session_state.get("messages", [])
-        if msg["role"] in CHARACTER_LIST or msg["role"] == NEW_CHAR_NAME
-    )
+    history_text = "\n".join(f"{msg['role']}: {msg['content']}" for msg in st.session_state.get("messages", []))
     summary = generate_summary(history_text)
     st.sidebar.markdown("### 会話のまとめ")
     st.sidebar.markdown(summary)
@@ -163,7 +156,7 @@ if current_time - st.session_state.last_event_time > event_interval:
 # ==========================
 def load_avatars():
     avatar_imgs = {}
-    avatar_imgs[USER_NAME] = "👤"  # ユーザーは絵文字
+    avatar_imgs[USER_NAME] = "👤"
     mapping = {
         YUKARI_NAME: "yukari.png",
         SHINYA_NAME: "shinya.png",
@@ -277,21 +270,21 @@ def adjust_parameters(question: str, age: int) -> dict:
     params = {}
     # ゆかりの性格
     if age < 30:
-        params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "エネルギッシュでポジティブな回答"}
+        params[YUKARI_NAME] = {"style": "明るくフレンドリー", "detail": "若々しいエネルギーと笑顔で親しみやすく答える"}
     elif age < 50:
-        params[YUKARI_NAME] = {"style": "元気さは残しつつ、包容力がある", "detail": "ポジティブであり、経験に基づいたバランスの取れた回答"}
+        params[YUKARI_NAME] = {"style": "温かみのある", "detail": "経験を生かし、柔らかい口調でバランスの取れた回答をする"}
     else:
-        params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験に基づいた落ち着いた回答"}
+        params[YUKARI_NAME] = {"style": "穏やかで包容力のある", "detail": "長い経験に裏打ちされた落ち着きと優しさで答える"}
     # しんやの性格
     if analyze_question(question) > 0:
-        params[SHINYA_NAME] = {"style": "共感的", "detail": "気持ちに寄り添いながら答える"}
+        params[SHINYA_NAME] = {"style": "共感力にあふれる", "detail": "相手の気持ちを理解し、温かい言葉で寄り添う回答をする"}
     else:
-        params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静に根拠を示すがおもしろく答える"}
+        params[SHINYA_NAME] = {"style": "冷静かつ論理的", "detail": "事実やデータをもとに、しっかりと根拠を示しながらも柔らかい口調で答える"}
     # みのるの性格
     if analyze_question(question) > 0:
-        params[MINORU_NAME] = {"style": "柔軟", "detail": "多面的な視点で優しくアドバイス"}
+        params[MINORU_NAME] = {"style": "柔らかく親しみやすい", "detail": "多角的な視点で、優しいアドバイスや提案をする"}
     else:
-        params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な立場で率直に意見を述べる"}
+        params[MINORU_NAME] = {"style": "客観的で現実的", "detail": "冷静かつ中立的な立場で、正確な情報を分かりやすく伝える"}
     return params
 
 def generate_new_character() -> tuple:
@@ -350,9 +343,7 @@ if user_input:
         discussion = generate_discussion(user_input, persona_params, ai_age)
     else:
         history = "\n".join(
-            f'{m["role"]}: {m["content"]}'
-            for m in st.session_state.messages
-            if m["role"] in CHARACTER_LIST or m["role"] == NEW_CHAR_NAME
+            f'{m["role"]}: {m["content"]}' for m in st.session_state.messages if m["role"] in CHARACTER_LIST or m["role"] == NEW_CHAR_NAME
         )
         discussion = continue_discussion(user_input, history)
     
