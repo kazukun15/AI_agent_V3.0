@@ -114,12 +114,10 @@ user_name = st.text_input("あなたの名前を入力してください", value
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
-# サイドバー：カスタム新キャラクター設定（ミニゲーム機能は排除）
+# サイドバー：カスタム新キャラクター設定は廃止
 # ------------------------------------------------------------------
-st.sidebar.header("カスタム新キャラクター設定")
-custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
-custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
-st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+# ここではカスタム機能を廃止し、固定のキャラクター（new_character）は常に "new_character" とします。
+st.sidebar.info("※このサイドバーはスマホの場合、ハンバーガーメニューからアクセスしてください。")
 
 # ------------------------------------------------------------------
 # キャラクター定義（固定メンバー）
@@ -137,7 +135,7 @@ NEW_CHAR_NAME = "new_character"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターはサイドバー設定で指定がなければランダム生成
+# 固定の new_character は "new_character" とする
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -213,10 +211,6 @@ with cols[2]:
         st.write("minoru")
     st.markdown(f"<div class='character-message'><strong>{MINORU_NAME}</strong><br>{get_latest_message(MINORU_NAME)}</div>", unsafe_allow_html=True)
 with cols[3]:
-    if custom_new_char_name.strip() and custom_new_char_personality.strip():
-        new_char_name = custom_new_char_name.strip()
-    else:
-        new_char_name = NEW_CHAR_NAME
     try:
         img = Image.open("avatars/new_character.png")
     except:
@@ -225,7 +219,7 @@ with cols[3]:
         st.image(img, width=100)
     else:
         st.write("new_character")
-    st.markdown(f"<div class='character-message'><strong>{new_char_name}</strong><br>{get_latest_message(new_char_name)}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='character-message'><strong>{NEW_CHAR_NAME}</strong><br>{get_latest_message(NEW_CHAR_NAME)}</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
@@ -312,16 +306,8 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
     return params
 
 def generate_new_character() -> tuple:
-    if custom_new_char_name.strip() and custom_new_char_personality.strip():
-        return custom_new_char_name.strip(), custom_new_char_personality.strip()
-    candidates = [
-        ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-        ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-        ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-        ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-        ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-    ]
-    return random.choice(candidates)
+    # 固定の new_character を使用
+    return (NEW_CHAR_NAME, "よろしくね！")
 
 def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
@@ -367,14 +353,12 @@ def generate_summary(discussion: str) -> str:
 # ------------------------------------------------------------------
 # チャット履歴の表示（従来の形式）
 # ------------------------------------------------------------------
-# st.chat_message は role が "user" または "assistant" 以外だとエラーになるため、
-# それ以外の場合は表示用に "assistant" として扱います。
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
-    # role_for_chat は "user" と "assistant" の場合はそのまま、その他は "assistant" に変換
-    role_for_chat = role if role in ["user", "assistant"] else "assistant"
     display_name = st.session_state.get("user_name", "ユーザー") if role == "user" else role
+    # ここで role_for_chat を定義して "user" または "assistant" にする
+    role_for_chat = role if role in ["user", "assistant"] else "assistant"
     with st.chat_message(role_for_chat, avatar=avatar_img_dict.get(role, "🤖")):
         if role == "user":
             st.markdown(
