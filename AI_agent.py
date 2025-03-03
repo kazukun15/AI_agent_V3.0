@@ -15,7 +15,7 @@ from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 def load_config():
     try:
         try:
-            import tomllib  ############ Python 3.11以降用
+            import tomllib  # Python 3.11以降用
         except ImportError:
             import toml as tomllib
         with open("config.toml", "rb") as f:
@@ -45,16 +45,16 @@ def img_to_base64(img: Image.Image) -> str:
 # ==========================
 # 定数・初期設定
 # ==========================
-# 固定キャラクターの名前
+# キャラクター名（全て日本語で統一）
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
-YUKARI_NAME = "yukari"
-SHINYA_NAME = "shinya"
-MINORU_NAME = "minoru"
-NEW_CHAR_NAME = "new_character"
+YUKARI_NAME = "ゆかり"
+SHINYA_NAME = "しんや"
+MINORU_NAME = "みのる"
+NEW_CHAR_NAME = "新キャラクター"
 
-# Gemini API 用
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]  # new_characterは固定
+# Gemini API 用キャラクター名リスト（新キャラクター以外）
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ==========================
 # ページ設定＆タイトル
@@ -103,7 +103,7 @@ st.markdown(
 )
 
 # ==========================
-# 自動リフレッシュ（ライフイベント用）
+# 自動リフレッシュ（ライフイベント用：デモでは30秒毎）
 # ==========================
 st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
@@ -112,7 +112,7 @@ st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 # ==========================
 user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
-st.sidebar.info("※スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
+st.sidebar.info("※スマホの場合、画面左上のハンバーガーメニューからサイドバーにアクセスしてください。")
 
 # ==========================
 # APIキー、モデル設定
@@ -163,7 +163,7 @@ def load_avatar_images():
 avatar_img_dict = load_avatar_images()
 
 # ==========================
-# 固定キャラクター表示エリア（上部）
+# 固定キャラクター表示エリア（上部）：各キャラクターの最新発言を表示
 # ==========================
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
@@ -177,7 +177,6 @@ def get_latest_message(char_role):
     }
     return defaults.get(char_role, "")
 
-# キャラクターエリアの再表示は、ユーザー入力後に最新のセッション状態を反映するためにここで表示
 def display_characters():
     st.markdown("<div class='character-container'>", unsafe_allow_html=True)
     cols = st.columns(4)
@@ -331,7 +330,7 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
         f"みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
+        f"{NEW_CHAR_NAME}: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
@@ -385,6 +384,6 @@ if user_input:
             st.session_state.messages.append({"role": role, "content": content})
 
 # ==========================
-# 16. 固定キャラクター表示エリア（上部）の再表示
+# 16. 固定キャラクター表示エリアの再表示（最新の発言を反映）
 # ==========================
 display_characters()
