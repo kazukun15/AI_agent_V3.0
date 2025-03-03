@@ -9,67 +9,45 @@ from io import BytesIO
 from PIL import Image
 from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
-# ==========================
-# ヘルパー関数
-# ==========================
-def load_config():
-    try:
-        try:
-            import tomllib  ############ Python 3.11以降用
-        except ImportError:
-            import toml as tomllib
-        with open("config.toml", "rb") as f:
-            config = tomllib.load(f)
-        theme_config = config.get("theme", {})
-        return {
-            "primaryColor": theme_config.get("primaryColor", "#729075"),
-            "backgroundColor": theme_config.get("backgroundColor", "#f1ece3"),
-            "secondaryBackgroundColor": theme_config.get("secondaryBackgroundColor", "#fff8ef"),
-            "textColor": theme_config.get("textColor", "#5e796a"),
-            "font": theme_config.get("font", "monospace")
-        }
-    except Exception as e:
-        return {
-            "primaryColor": "#729075",
-            "backgroundColor": "#f1ece3",
-            "secondaryBackgroundColor": "#fff8ef",
-            "textColor": "#5e796a",
-            "font": "monospace"
-        }
-
-def img_to_base64(img: Image.Image) -> str:
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
-
-# ==========================
-# 定数・初期設定
-# ==========================
-# 固定キャラクターの名前（変更不可）
-USER_NAME = "user"
-ASSISTANT_NAME = "assistant"
-YUKARI_NAME = "yukari"
-SHINYA_NAME = "shinya"
-MINORU_NAME = "minoru"
-NEW_CHAR_NAME = "new_character"
-
-# Gemini API 用
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]  # new_characterは固定で扱う
-
-# ==========================
-# ページ設定＆テーマ反映
-# ==========================
+# ------------------------------------------------------------------
+# 1. ページ設定＆タイトル（最初に呼び出す）
+# ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
-config_values = load_config()
+# ------------------------------------------------------------------
+# 2. config.toml の読み込み（テーマ設定）
+# ------------------------------------------------------------------
+try:
+    try:
+        import tomllib  # Python 3.11以降
+    except ImportError:
+        import toml as tomllib
+    with open("config.toml", "rb") as f:
+        config = tomllib.load(f)
+    theme_config = config.get("theme", {})
+    primaryColor = theme_config.get("primaryColor", "#729075")
+    backgroundColor = theme_config.get("backgroundColor", "#f1ece3")
+    secondaryBackgroundColor = theme_config.get("secondaryBackgroundColor", "#fff8ef")
+    textColor = theme_config.get("textColor", "#5e796a")
+    font = theme_config.get("font", "monospace")
+except Exception as e:
+    primaryColor = "#729075"
+    backgroundColor = "#f1ece3"
+    secondaryBackgroundColor = "#fff8ef"
+    textColor = "#5e796a"
+    font = "monospace"
+
+# ------------------------------------------------------------------
+# 3. 共通スタイルの設定（テーマ反映＋吹き出し・キャラクター表示用）
+# ------------------------------------------------------------------
 st.markdown(
     f"""
     <style>
     body {{
-        background-color: {config_values['backgroundColor']};
-        font-family: {config_values['font']}, sans-serif;
-        color: {config_values['textColor']};
+        background-color: {backgroundColor};
+        font-family: {font}, sans-serif;
+        color: {textColor};
     }}
     /* 固定キャラクター表示エリア */
     .character-container {{
@@ -81,7 +59,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 吹き出し（キャラクターの最新発言） */
+    /* 吹き出し（キャラクター横に独立して上部に表示） */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.8);
         border: 1px solid #ddd;
@@ -102,36 +80,48 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ==========================
-# 自動リフレッシュ（ライフイベント用）
-# ==========================
+# ------------------------------------------------------------------
+# 4. 自動リフレッシュ（ライフイベント用：デモでは30秒毎）
+# ------------------------------------------------------------------
 st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
-# ==========================
-# サイドバー入力（名前、AI年齢）
-# ==========================
-user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
-ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
-st.sidebar.info("※スマホの場合、画面左上のハンバーガーメニューからアクセスできます。")
+# ------------------------------------------------------------------
+# 5. ユーザー入力（サイドバーに収納）
+# ------------------------------------------------------------------
+user_name = st.sidebar.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+ai_age = st.sidebar.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
+st.sidebar.info("※スマホの場合、画面左上のハンバーガーメニューからサイドバーにアクセスしてください。")
 
-# ==========================
-# APIキー、モデル設定
-# ==========================
+# ------------------------------------------------------------------
+# 6. キャラクター定義（固定メンバー）
+# ------------------------------------------------------------------
+USER_NAME = "user"
+ASSISTANT_NAME = "assistant"
+YUKARI_NAME = "yukari"
+SHINYA_NAME = "shinya"
+MINORU_NAME = "minoru"
+NEW_CHAR_NAME = "new_character"
+
+# ------------------------------------------------------------------
+# 7. 定数／設定（APIキー、モデル）
+# ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+# new_character は固定で "new_character" とする
 
-# ==========================
-# セッション初期化（チャット履歴）
-# ==========================
+# ------------------------------------------------------------------
+# 8. セッション初期化（チャット履歴）
+# ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==========================
-# ライフイベント自動生成（30秒毎）
-# ==========================
+# ------------------------------------------------------------------
+# 9. ライフイベント自動生成（一定間隔でランダムイベント投稿）
+# ------------------------------------------------------------------
 if "last_event_time" not in st.session_state:
     st.session_state.last_event_time = time.time()
-event_interval = 30  # デモ用
+event_interval = 30  # 30秒毎（デモ用）
 current_time = time.time()
 if current_time - st.session_state.last_event_time > event_interval:
     life_events = [
@@ -146,25 +136,27 @@ if current_time - st.session_state.last_event_time > event_interval:
     st.session_state.messages.append({"role": life_char, "content": event_message})
     st.session_state.last_event_time = current_time
 
-# ==========================
-# キャラクター画像の読み込み
-# ==========================
-def load_avatar_images():
-    avatar_imgs = {}
-    for char in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]:
-        try:
-            avatar_imgs[char] = Image.open(f"avatars/{char}.png")
-        except Exception as e:
-            st.error(f"{char} の画像読み込みエラー: {e}")
-            avatar_imgs[char] = None
-    avatar_imgs[USER_NAME] = "👤"  # ユーザーは絵文字
-    return avatar_imgs
+# ------------------------------------------------------------------
+# 10. キャラクター画像の読み込み
+# ------------------------------------------------------------------
+def img_to_base64(img: Image.Image) -> str:
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
-avatar_img_dict = load_avatar_images()
+avatar_img_dict = {}
+for char in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]:
+    try:
+        avatar_img_dict[char] = Image.open(f"avatars/{char}.png")
+    except Exception as e:
+        st.error(f"{char} の画像読み込みエラー: {e}")
+        avatar_img_dict[char] = None
+# ユーザーアバターは "👤" を使用
+avatar_img_dict[USER_NAME] = "👤"
 
-# ==========================
-# 固定キャラクター表示エリア（上部）: 各キャラクターの画像と最新発言（吹き出し）
-# ==========================
+# ------------------------------------------------------------------
+# 11. 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新の発言（吹き出し）を表示
+# ------------------------------------------------------------------
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
         if msg["role"] == char_role:
@@ -229,9 +221,9 @@ with cols[3]:
         st.write(NEW_CHAR_NAME)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ==========================
-# Gemini API 呼び出し関連関数
-# ==========================
+# ------------------------------------------------------------------
+# 12. Gemini API 呼び出し関連関数
+# ------------------------------------------------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
@@ -268,9 +260,9 @@ def call_gemini_api(prompt: str) -> str:
     except Exception as e:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
-# ==========================
-# 会話生成関連関数
-# ==========================
+# ------------------------------------------------------------------
+# 13. 会話生成関連関数
+# ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -357,12 +349,11 @@ def generate_summary(discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-# ==========================
-# 14. ユーザー入力と会話生成
-# ==========================
+# ------------------------------------------------------------------
+# 14. ユーザー入力の取得（st.chat_input）と会話生成
+# ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # ユーザー入力をセッションに追加
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     if len(st.session_state.messages) == 1:
@@ -376,7 +367,6 @@ if user_input:
         )
         discussion = continue_discussion(user_input, history)
     
-    # 会話生成結果を各行ごとに解析してセッションに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -384,4 +374,4 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
-    # 固定キャラクターエリアは自動再描画で更新される
+    # ページ再実行時、上部の固定キャラクターエリアの吹き出しが更新される
