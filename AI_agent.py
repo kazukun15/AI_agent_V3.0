@@ -52,7 +52,7 @@ SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "あたらしいともだち"
 
-# Gemini API 用キャラクターリスト（新キャラクター以外）
+# Gemini API 用キャラクターリスト（あたらしいともだち以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ==========================
@@ -299,7 +299,7 @@ def generate_discussion(question: str, persona_params: dict, age: int) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
+        "あたらしいともだち: 発言内容\n"
         "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
@@ -313,7 +313,7 @@ def continue_discussion(user_input: str, current_discussion: str) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
+        "あたらしいともだち: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
