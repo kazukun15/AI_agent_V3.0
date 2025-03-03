@@ -49,9 +49,9 @@ USER_NAME = "user"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "あたらしいともだち"
+NEW_CHAR_NAME = "新キャラクター"
 
-# Gemini API 用キャラクターリスト（あたらしいともだち以外）
+# Gemini API 用キャラクターリスト（新キャラクター以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ==========================
@@ -80,7 +80,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 読みやすい吹き出し */
+    /* 吹き出し（キャラクターの最新発言） - 横幅300px（約10文字以上分） */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
@@ -96,7 +96,7 @@ st.markdown(
     .character-image {{
         width: 120px;
     }}
-    /* スマホ向けレスポンシブ設定 */
+    /* スマホ向けレスポンシブ */
     @media only screen and (max-width: 768px) {{
         .character-container {{
             flex-direction: column;
@@ -114,6 +114,18 @@ st.markdown(
 user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
 st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
+
+# サイドバーに会話まとめボタンを配置
+if st.sidebar.button("会話をまとめる"):
+    # キャラクターの発言のみをまとめる
+    history_text = "\n".join(
+        f"{msg['role']}: {msg['content']}"
+        for msg in st.session_state.messages
+        if msg["role"] in CHARACTER_LIST or msg["role"] == NEW_CHAR_NAME
+    )
+    summary = generate_summary(history_text)
+    st.sidebar.markdown("### 会話のまとめ")
+    st.sidebar.markdown(summary)
 
 # ==========================
 # APIキー、モデル設定
@@ -152,7 +164,7 @@ if current_time - st.session_state.last_event_time > event_interval:
 # ==========================
 def load_avatars():
     avatar_imgs = {}
-    avatar_imgs[USER_NAME] = "👤"
+    avatar_imgs[USER_NAME] = "👤"  # ユーザーは絵文字
     mapping = {
         YUKARI_NAME: "yukari.png",
         SHINYA_NAME: "shinya.png",
@@ -171,7 +183,7 @@ def load_avatars():
 avatar_img_dict = load_avatars()
 
 # ==========================
-# 最新の発言取得
+# 最新の発言取得関数
 # ==========================
 def get_latest_message(role_name: str) -> str:
     for msg in reversed(st.session_state.messages):
@@ -293,14 +305,14 @@ def generate_discussion(question: str, persona_params: dict, age: int) -> str:
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}】な視点で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
-    prompt += f"さらに、あたらしいともだちとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
+    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
     prompt += (
         "\n4人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通り:\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
@@ -314,7 +326,7 @@ def continue_discussion(user_input: str, current_discussion: str) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
