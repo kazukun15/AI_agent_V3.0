@@ -50,7 +50,7 @@ USER_NAME = "user"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"
+NEW_CHAR_NAME = "あたらしいともだち"
 
 # Gemini API 用キャラクターリスト（新キャラクター以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
