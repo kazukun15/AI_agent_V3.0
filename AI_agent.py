@@ -49,9 +49,9 @@ USER_NAME = "user"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"
+NEW_CHAR_NAME = "あたらしいともだち"
 
-# Gemini API 用キャラクターリスト（新キャラクター以外）
+# Gemini API 用キャラクターリスト（あたらしいともだち以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ==========================
@@ -297,14 +297,14 @@ def generate_discussion(question: str, persona_params: dict, age: int) -> str:
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}】な視点で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
+    prompt += f"さらに、あたらしいともだちとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
     prompt += (
         "\n4人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通り:\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
+        "あたらしいともだち: 発言内容\n"
         "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
@@ -318,7 +318,7 @@ def continue_discussion(user_input: str, current_discussion: str) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "新キャラクター: 発言内容\n"
+        "あたらしいともだち: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
