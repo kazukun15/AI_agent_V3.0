@@ -49,10 +49,16 @@ USER_NAME = "user"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "あたらしいともだち"
+NEW_CHAR_NAME = "新キャラクター"
 
-# Gemini API 用キャラクターリスト（あたらしいともだち以外）
+# Gemini API 用キャラクターリスト（新キャラクター以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+
+# ==========================
+# セッション初期化（会話履歴）
+# ==========================
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # ==========================
 # ページ設定＆タイトル
@@ -112,7 +118,7 @@ user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", ke
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
 st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
-# サイドバーに会話をまとめるボタンを追加
+# サイドバーに「会話をまとめる」ボタンを追加
 if st.sidebar.button("会話をまとめる"):
     history_text = "\n".join(f"{msg['role']}: {msg['content']}" for msg in st.session_state.get("messages", []))
     summary = generate_summary(history_text)
@@ -124,12 +130,6 @@ if st.sidebar.button("会話をまとめる"):
 # ==========================
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
-
-# ==========================
-# セッション初期化（会話履歴）
-# ==========================
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
 # ==========================
 # ライフイベント自動生成（30秒毎、デモ用）
@@ -279,7 +279,7 @@ def adjust_parameters(question: str, age: int) -> dict:
     if analyze_question(question) > 0:
         params[SHINYA_NAME] = {"style": "共感力にあふれる", "detail": "相手の気持ちを理解し、温かい言葉で寄り添う回答をする"}
     else:
-        params[SHINYA_NAME] = {"style": "冷静かつ論理的", "detail": "事実やデータをもとに、しっかりと根拠を示しながらも柔らかい口調で答える"}
+        params[SHINYA_NAME] = {"style": "冷静かつ論理的", "detail": "事実やデータを基に、しっかりと根拠を示しながらも柔らかい口調で答える"}
     # みのるの性格
     if analyze_question(question) > 0:
         params[MINORU_NAME] = {"style": "柔らかく親しみやすい", "detail": "多角的な視点で、優しいアドバイスや提案をする"}
@@ -297,14 +297,14 @@ def generate_discussion(question: str, persona_params: dict, age: int) -> str:
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}】な視点で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
-    prompt += f"さらに、あたらしいともだちとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
+    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
     prompt += (
         "\n4人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通り:\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
@@ -318,7 +318,7 @@ def continue_discussion(user_input: str, current_discussion: str) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
