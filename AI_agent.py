@@ -7,11 +7,10 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
-#from streamlit_chat import message  # これを使用せず st.markdown で表示
 from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
 # ------------------------------------------------------------------
-# 1. ページ設定＆タイトル
+# 1. ページ設定＆タイトル（最初に呼び出す）
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
@@ -50,32 +49,6 @@ st.markdown(
         font-family: {font}, sans-serif;
         color: {textColor};
     }}
-    .chat-container {{
-        max-height: 600px;
-        overflow-y: auto;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        background-color: {secondaryBackgroundColor};
-    }}
-    /* チャット履歴用吹き出し */
-    .chat-bubble {{
-        background-color: #d4f7dc;
-        border-radius: 10px;
-        padding: 8px;
-        display: inline-block;
-        max-width: 80%;
-        word-wrap: break-word;
-        white-space: pre-wrap;
-        margin: 4px 0;
-    }}
-    .chat-header {{
-        font-weight: bold;
-        margin-bottom: 4px;
-        color: {primaryColor};
-    }}
-    /* 固定キャラクター表示エリア */
     .character-container {{
         display: flex;
         justify-content: space-around;
@@ -85,6 +58,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
+    /* 吹き出し（キャラクター横に独立して表示） */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.8);
         border: 1px solid #ddd;
@@ -100,19 +74,6 @@ st.markdown(
     .character-image {{
         width: 120px;
     }}
-    .character-message {{
-        margin-top: 5px;
-        background-color: rgba(255, 255, 255, 0.8);
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 5px;
-        display: inline-block;
-        max-width: 150px;
-        word-wrap: break-word;
-        white-space: pre-wrap;
-        font-size: 14px;
-        line-height: 1.3;
-    }}
     </style>
     """,
     unsafe_allow_html=True
@@ -124,13 +85,13 @@ st.markdown(
 st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
 # ------------------------------------------------------------------
-# 5. ユーザー入力
+# 5. ユーザー入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
-# 6. サイドバー（カスタム機能廃止）
+# 6. サイドバー（カスタム機能は廃止）
 # ------------------------------------------------------------------
 st.sidebar.info("※このサイドバーはスマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
@@ -197,7 +158,7 @@ for char in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]:
 avatar_img_dict[USER_NAME] = "👤"
 
 # ------------------------------------------------------------------
-# 12. 固定キャラクター表示エリア（上部）
+# 12. 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新メッセージを表示
 # ------------------------------------------------------------------
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
@@ -392,33 +353,16 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# 15. チャット履歴の表示（従来の形式：st.chat_message を使用せず st.markdown で表示）
+# 15. チャット履歴の表示（従来の形式は廃止し、固定キャラクターエリアのみ更新）
 # ------------------------------------------------------------------
-for msg in st.session_state.messages:
-    role = msg["role"]
-    content = msg["content"]
-    if role == "user":
-        display_name = st.session_state.get("user_name", "ユーザー")
-        st.markdown(
-            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        display_name = role  # 固定キャラクターの場合はそのまま
-        st.markdown(
-            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-            unsafe_allow_html=True,
-        )
+# ※ここでは下部のチャットバブルは表示せず、上部の固定キャラクターエリアの吹き出しのみを更新する
 
 # ------------------------------------------------------------------
 # 16. ユーザー入力の取得（st.chat_input）と会話生成
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    st.markdown(
-        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{st.session_state.get("user_name", "ユーザー")}</div>{user_input}</div></div>',
-        unsafe_allow_html=True,
-    )
+    # ユーザー入力をセッションに追加
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     if len(st.session_state.messages) == 1:
@@ -432,6 +376,7 @@ if user_input:
         )
         discussion = continue_discussion(user_input, history)
     
+    # Gemini API から返された各キャラクターの発言をセッションに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -439,15 +384,6 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
-            if role == "user":
-                display_name = st.session_state.get("user_name", "ユーザー")
-                st.markdown(
-                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                display_name = role
-                st.markdown(
-                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                    unsafe_allow_html=True,
-                )
+    
+    # 固定キャラクター表示エリアを再表示するため、ページ全体を再描画させる（自動リフレッシュにより更新）
+    st.experimental_rerun()
