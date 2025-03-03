@@ -2,9 +2,11 @@ import streamlit as st
 import requests
 import re
 import random
+import time
 import json
 from PIL import Image
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用（ライフイベントなど用）
 
 # ------------------------------------------------------------------
 # st.set_page_config() は最初に呼び出す
@@ -77,13 +79,14 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザーの名前入力（上部）
+# 自動リフレッシュ（ライフイベント用：デモでは30秒毎）
 # ------------------------------------------------------------------
-user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
 # ------------------------------------------------------------------
-# AIの年齢入力（上部）
+# ユーザー入力（上部）
 # ------------------------------------------------------------------
+user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -94,7 +97,6 @@ custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（�
 custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
 
 st.sidebar.header("ミニゲーム／クイズ")
-# クイズ開始ボタンにユニークな key を指定
 if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     quiz_list = [
         {"question": "日本の首都は？", "answer": "東京"},
@@ -107,7 +109,6 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.quiz_question = quiz["question"]
     st.session_state.quiz_answer = quiz["answer"]
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
-
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
 # ------------------------------------------------------------------
@@ -115,10 +116,10 @@ st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメ
 # ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
-YUKARI_NAME = "ゆかり"
-SHINYA_NAME = "しんや"
-MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"
+YUKARI_NAME = "yukari"
+SHINYA_NAME = "shinya"
+MINORU_NAME = "minoru"
+NEW_CHAR_NAME = "new_character"
 
 # ------------------------------------------------------------------
 # 定数／設定（APIキー、モデル）
@@ -126,7 +127,6 @@ NEW_CHAR_NAME = "新キャラクター"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターはサイドバーで指定がなければランダム
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -135,21 +135,38 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
+# ライフイベント自動生成（一定間隔でランダムイベントを投稿）
+# ------------------------------------------------------------------
+if "last_event_time" not in st.session_state:
+    st.session_state.last_event_time = time.time()
+
+event_interval = 30  # 30秒毎（デモ用）
+current_time = time.time()
+if current_time - st.session_state.last_event_time > event_interval:
+    life_events = [
+        "お茶を淹れてリラックス中。",
+        "散歩に出かけたよ。",
+        "ちょっとお昼寝中…",
+        "ニュースをチェックしてるよ。",
+        "少しストレッチしたよ！"
+    ]
+    event_message = random.choice(life_events)
+    life_char = random.choice(NAMES)
+    st.session_state.messages.append({"role": life_char, "content": event_message})
+    st.session_state.last_event_time = current_time
+
+# ------------------------------------------------------------------
 # アイコン画像の読み込み（avatars/ に配置）
 # ------------------------------------------------------------------
 try:
-    img_user = Image.open("avatars/user.png")
     img_yukari = Image.open("avatars/yukari.png")
     img_shinya = Image.open("avatars/shinya.png")
     img_minoru = Image.open("avatars/minoru.png")
     img_newchar = Image.open("avatars/new_character.png")
+    img_user = Image.open("avatars/user.png")
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
-    img_user = "👤"
-    img_yukari = "🌸"
-    img_shinya = "🌊"
-    img_minoru = "🍀"
-    img_newchar = "⭐"
+    img_yukari = img_shinya = img_minoru = img_newchar = img_user = None
 
 avatar_img_dict = {
     USER_NAME: img_user,
@@ -321,7 +338,6 @@ for msg in st.session_state.messages:
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # クイズがアクティブなら、ユーザーの入力をクイズの回答として処理
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
             quiz_result = "正解です！おめでとうございます！"
