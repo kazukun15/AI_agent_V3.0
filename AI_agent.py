@@ -7,17 +7,17 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
-from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+#from streamlit_chat import message  # これを使用せず st.markdown で表示
 from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
 # ------------------------------------------------------------------
-# st.set_page_config() は最初に呼び出す
+# 1. ページ設定＆タイトル
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
 # ------------------------------------------------------------------
-# config.toml の読み込み（同じディレクトリにある場合）
+# 2. config.toml の読み込み（テーマ設定）
 # ------------------------------------------------------------------
 try:
     try:
@@ -40,7 +40,7 @@ except Exception as e:
     font = "monospace"
 
 # ------------------------------------------------------------------
-# 背景・共通スタイルの設定（テーマ設定を反映）
+# 3. 共通スタイルの設定（テーマ反映＋吹き出し・キャラクター表示用）
 # ------------------------------------------------------------------
 st.markdown(
     f"""
@@ -81,8 +81,24 @@ st.markdown(
         justify-content: space-around;
         margin-bottom: 20px;
     }}
-    .character-box {{
+    .character-wrapper {{
         text-align: center;
+        margin: 10px;
+    }}
+    .speech-bubble {{
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 8px;
+        display: inline-block;
+        max-width: 140px;
+        margin-bottom: 5px;
+        font-size: 14px;
+        line-height: 1.3;
+        word-wrap: break-word;
+    }}
+    .character-image {{
+        width: 120px;
     }}
     .character-message {{
         margin-top: 5px;
@@ -103,24 +119,23 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# 自動リフレッシュ（ライフイベント用：デモでは30秒毎）
+# 4. 自動リフレッシュ（ライフイベント用：デモでは30秒毎）
 # ------------------------------------------------------------------
 st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
 # ------------------------------------------------------------------
-# ユーザー入力（上部）
+# 5. ユーザー入力
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
-# サイドバー：カスタム新キャラクター設定は廃止
+# 6. サイドバー（カスタム機能廃止）
 # ------------------------------------------------------------------
-# ここではカスタム機能を廃止し、固定のキャラクター（new_character）は常に "new_character" とします。
-st.sidebar.info("※このサイドバーはスマホの場合、ハンバーガーメニューからアクセスしてください。")
+st.sidebar.info("※このサイドバーはスマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
 # ------------------------------------------------------------------
-# キャラクター定義（固定メンバー）
+# 7. キャラクター定義（固定メンバー）
 # ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
@@ -130,21 +145,21 @@ MINORU_NAME = "minoru"
 NEW_CHAR_NAME = "new_character"
 
 # ------------------------------------------------------------------
-# 定数／設定（APIキー、モデル）
+# 8. 定数／設定（APIキー、モデル）
 # ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# 固定の new_character は "new_character" とする
+# new_character は固定の "new_character" とする
 
 # ------------------------------------------------------------------
-# セッション初期化（チャット履歴）
+# 9. セッション初期化（チャット履歴）
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# ライフイベント自動生成（一定間隔でランダムイベントを投稿）
+# 10. ライフイベント自動生成（一定間隔でランダムイベント投稿）
 # ------------------------------------------------------------------
 if "last_event_time" not in st.session_state:
     st.session_state.last_event_time = time.time()
@@ -164,7 +179,25 @@ if current_time - st.session_state.last_event_time > event_interval:
     st.session_state.last_event_time = current_time
 
 # ------------------------------------------------------------------
-# 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新メッセージを表示
+# 11. キャラクター画像の読み込み
+# ------------------------------------------------------------------
+def img_to_base64(img: Image.Image) -> str:
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+avatar_img_dict = {}
+for char in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]:
+    try:
+        avatar_img_dict[char] = Image.open(f"avatars/{char}.png")
+    except Exception as e:
+        st.error(f"{char} の画像読み込みエラー: {e}")
+        avatar_img_dict[char] = None
+# ユーザーアバターは "👤" を使用
+avatar_img_dict[USER_NAME] = "👤"
+
+# ------------------------------------------------------------------
+# 12. 固定キャラクター表示エリア（上部）
 # ------------------------------------------------------------------
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
@@ -181,49 +214,57 @@ def get_latest_message(char_role):
 st.markdown("<div class='character-container'>", unsafe_allow_html=True)
 cols = st.columns(4)
 with cols[0]:
-    try:
-        img = Image.open("avatars/yukari.png")
-    except:
-        img = None
-    if img:
-        st.image(img, width=100)
+    if avatar_img_dict.get(YUKARI_NAME):
+        img = avatar_img_dict[YUKARI_NAME]
+        st.markdown(f"""
+            <div class="character-wrapper">
+                <div class="speech-bubble">{get_latest_message(YUKARI_NAME)}</div>
+                <img src="data:image/png;base64,{img_to_base64(img)}" class="character-image">
+                <div><strong>{YUKARI_NAME}</strong></div>
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        st.write("yukari")
-    st.markdown(f"<div class='character-message'><strong>{YUKARI_NAME}</strong><br>{get_latest_message(YUKARI_NAME)}</div>", unsafe_allow_html=True)
+        st.write(YUKARI_NAME)
 with cols[1]:
-    try:
-        img = Image.open("avatars/shinya.png")
-    except:
-        img = None
-    if img:
-        st.image(img, width=100)
+    if avatar_img_dict.get(SHINYA_NAME):
+        img = avatar_img_dict[SHINYA_NAME]
+        st.markdown(f"""
+            <div class="character-wrapper">
+                <div class="speech-bubble">{get_latest_message(SHINYA_NAME)}</div>
+                <img src="data:image/png;base64,{img_to_base64(img)}" class="character-image">
+                <div><strong>{SHINYA_NAME}</strong></div>
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        st.write("shinya")
-    st.markdown(f"<div class='character-message'><strong>{SHINYA_NAME}</strong><br>{get_latest_message(SHINYA_NAME)}</div>", unsafe_allow_html=True)
+        st.write(SHINYA_NAME)
 with cols[2]:
-    try:
-        img = Image.open("avatars/minoru.png")
-    except:
-        img = None
-    if img:
-        st.image(img, width=100)
+    if avatar_img_dict.get(MINORU_NAME):
+        img = avatar_img_dict[MINORU_NAME]
+        st.markdown(f"""
+            <div class="character-wrapper">
+                <div class="speech-bubble">{get_latest_message(MINORU_NAME)}</div>
+                <img src="data:image/png;base64,{img_to_base64(img)}" class="character-image">
+                <div><strong>{MINORU_NAME}</strong></div>
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        st.write("minoru")
-    st.markdown(f"<div class='character-message'><strong>{MINORU_NAME}</strong><br>{get_latest_message(MINORU_NAME)}</div>", unsafe_allow_html=True)
+        st.write(MINORU_NAME)
 with cols[3]:
-    try:
-        img = Image.open("avatars/new_character.png")
-    except:
-        img = None
-    if img:
-        st.image(img, width=100)
+    if avatar_img_dict.get(NEW_CHAR_NAME):
+        img = avatar_img_dict[NEW_CHAR_NAME]
+        st.markdown(f"""
+            <div class="character-wrapper">
+                <div class="speech-bubble">{get_latest_message(NEW_CHAR_NAME)}</div>
+                <img src="data:image/png;base64,{img_to_base64(img)}" class="character-image">
+                <div><strong>{NEW_CHAR_NAME}</strong></div>
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        st.write("new_character")
-    st.markdown(f"<div class='character-message'><strong>{NEW_CHAR_NAME}</strong><br>{get_latest_message(NEW_CHAR_NAME)}</div>", unsafe_allow_html=True)
+        st.write(NEW_CHAR_NAME)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# Gemini API 呼び出し関連関数
+# 13. Gemini API 呼び出し関連関数
 # ------------------------------------------------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
@@ -262,7 +303,7 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 # ------------------------------------------------------------------
-# 会話生成関連関数
+# 14. 会話生成関連関数
 # ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
     score = 0
@@ -351,36 +392,33 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# チャット履歴の表示（従来の形式）
+# 15. チャット履歴の表示（従来の形式：st.chat_message を使用せず st.markdown で表示）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
-    display_name = st.session_state.get("user_name", "ユーザー") if role == "user" else role
-    # ここで role_for_chat を定義して "user" または "assistant" にする
-    role_for_chat = role if role in ["user", "assistant"] else "assistant"
-    with st.chat_message(role_for_chat, avatar=avatar_img_dict.get(role, "🤖")):
-        if role == "user":
-            st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                unsafe_allow_html=True,
-            )
+    if role == "user":
+        display_name = st.session_state.get("user_name", "ユーザー")
+        st.markdown(
+            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        display_name = role  # 固定キャラクターの場合はそのまま
+        st.markdown(
+            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+            unsafe_allow_html=True,
+        )
 
 # ------------------------------------------------------------------
-# ユーザー入力の取得（st.chat_input）
+# 16. ユーザー入力の取得（st.chat_input）と会話生成
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(
-            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{st.session_state.get("user_name", "ユーザー")}</div>{user_input}</div></div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{st.session_state.get("user_name", "ユーザー")}</div>{user_input}</div></div>',
+        unsafe_allow_html=True,
+    )
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     if len(st.session_state.messages) == 1:
@@ -401,16 +439,15 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
-            role_for_chat = role if role in ["user", "assistant"] else "assistant"
-            display_name = st.session_state.get("user_name", "ユーザー") if role == "user" else role
-            with st.chat_message(role_for_chat, avatar=avatar_img_dict.get(role, "🤖")):
-                if role == "user":
-                    st.markdown(
-                        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
+            if role == "user":
+                display_name = st.session_state.get("user_name", "ユーザー")
+                st.markdown(
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                display_name = role
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                    unsafe_allow_html=True,
+                )
