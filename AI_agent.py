@@ -3,98 +3,70 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-# 画像を Base64 エンコードする関数を定義
+# ページ設定（最初に呼び出す）
+st.set_page_config(page_title="Bubble Over Character", layout="wide")
+st.title("キャラクター上部に吹き出し表示の例")
+
+# 画像を Base64 に変換する関数
 def img_to_base64(img: Image.Image) -> str:
-    """PIL Image を Base64 文字列に変換する。"""
     buffer = BytesIO()
     img.save(buffer, format="PNG")
     img_bytes = buffer.getvalue()
     return base64.b64encode(img_bytes).decode()
 
-st.set_page_config(page_title="Bubble Over Character", layout="wide")
-st.title("キャラクターの上に吹き出しを重ねる例")
-
-# CSS で吹き出しのスタイルを定義
+# CSS でキャラクターと吹き出しのスタイルを定義
 st.markdown("""
 <style>
 .character-wrapper {
-    position: relative;
-    display: inline-block;
+    text-align: center;
     margin: 10px;
 }
-.character-image {
-    width: 120px;  /* お好みのサイズに調整 */
-}
-/* 吹き出し（キャラクター画像の上に重ねる） */
 .speech-bubble {
-    position: absolute;
-    top: 10px;   
-    left: 10px;
-    background: rgba(255, 255, 255, 0.6); /* 半透明 */
+    background: rgba(255, 255, 255, 0.8); /* 半透明の背景 */
+    border: 1px solid #ddd;
     border-radius: 8px;
     padding: 8px;
+    display: inline-block;
     max-width: 140px;
-    word-wrap: break-word;
-    white-space: pre-wrap;
+    margin-bottom: 5px;
     font-size: 14px;
     line-height: 1.3;
-    border: 1px solid #ddd;
+    word-wrap: break-word;
 }
-.speech-bubble:after {
-    content: "";
-    position: absolute;
-    bottom: -10px; 
-    left: 20px;
-    border: 10px solid transparent;
-    border-top-color: rgba(255, 255, 255, 0.6); 
-    border-bottom: 0;
-    margin-left: -10px;
+.character-image {
+    width: 120px;  /* 適宜サイズを調整 */
 }
 </style>
 """, unsafe_allow_html=True)
 
-# キャラクター画像の読み込み
+# キャラクター名とサンプルメッセージ
 CHARACTERS = ["yukari", "shinya", "minoru", "new_character"]
+sample_messages = {
+    "yukari": "こんにちは、ゆかりです！",
+    "shinya": "やあ、しんやだよ！",
+    "minoru": "みのるだよ、よろしくね。",
+    "new_character": "新キャラです！よろしく！"
+}
+
+# キャラクター画像の読み込み（avatars フォルダ内に配置）
 avatar_img_dict = {}
 for char in CHARACTERS:
     try:
         avatar_img_dict[char] = Image.open(f"avatars/{char}.png")
-    except:
+    except Exception as e:
+        st.error(f"{char}の画像読み込みエラー: {e}")
         avatar_img_dict[char] = None
 
-# サンプルのメッセージ（本来は会話履歴などから取得）
-sample_messages = {
-    "yukari": "こんにちは、ゆかりです！",
-    "shinya": "やあ、しんやだよ！",
-    "minoru": "みのるだよ、よろしく！",
-    "new_character": "新キャラです！"
-}
-
+# 4人のキャラクターを横並びに表示するために4つのカラムを作成
 cols = st.columns(4)
-for i, char in enumerate(CHARACTERS):
-    img = avatar_img_dict[char]
-    msg = sample_messages.get(char, "・・・")
-    with cols[i]:
-        if img:
-            img_str = img_to_base64(img)
-            st.markdown(f"""
-            <div class="character-wrapper">
-                <img src="data:image/png;base64,{img_str}" class="character-image">
-                <div class="speech-bubble">
-                    {msg}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="character-wrapper">
-                <div>[{char}の画像なし]</div>
-                <div class="speech-bubble">{msg}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
-# ここから先はユーザー入力や Gemini API を使った会話生成などを実装可能
-user_input = st.chat_input("ここにメッセージを入力してください")
-if user_input:
-    st.write("ユーザーの入力:", user_input)
-    # Gemini API などで会話を生成して吹き出しを更新するなどの処理を行う
+for i, char in enumerate(CHARACTERS):
+    with cols[i]:
+        # 吹き出しを上部に表示
+        message_text = sample_messages.get(char, "...")
+        st.markdown(f"""
+            <div class="character-wrapper">
+                <div class="speech-bubble">{message_text}</div>
+                {"<img src='data:image/png;base64," + img_to_base64(avatar_img_dict[char]) + "' class='character-image'>" if avatar_img_dict[char] else f"<div>[{char}画像なし]</div>"}
+            </div>
+            """, unsafe_allow_html=True)
