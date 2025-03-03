@@ -80,7 +80,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 吹き出し（キャラクターの最新発言） - 横幅300px（約10文字以上分） */
+    /* 吹き出し（キャラクターの最新発言） - 読みやすく拡大 */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
@@ -115,12 +115,11 @@ user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", ke
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
 st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
-# サイドバーに会話まとめボタンを配置
+# サイドバーに会話まとめボタンを追加
 if st.sidebar.button("会話をまとめる"):
-    # キャラクターの発言のみをまとめる
     history_text = "\n".join(
         f"{msg['role']}: {msg['content']}"
-        for msg in st.session_state.messages
+        for msg in st.session_state.get("messages", [])
         if msg["role"] in CHARACTER_LIST or msg["role"] == NEW_CHAR_NAME
     )
     summary = generate_summary(history_text)
@@ -134,7 +133,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ==========================
-# セッション初期化（チャット履歴）
+# セッション初期化（会話履歴）
 # ==========================
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -280,14 +279,14 @@ def adjust_parameters(question: str, age: int) -> dict:
     if age < 30:
         params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "エネルギッシュでポジティブな回答"}
     elif age < 50:
-        params[YUKARI_NAME] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
+        params[YUKARI_NAME] = {"style": "元気さは残しつつ、包容力がある", "detail": "ポジティブであり、経験に基づいたバランスの取れた回答"}
     else:
         params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験に基づいた落ち着いた回答"}
     # しんやの性格
     if analyze_question(question) > 0:
         params[SHINYA_NAME] = {"style": "共感的", "detail": "気持ちに寄り添いながら答える"}
     else:
-        params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静に根拠を示して答える"}
+        params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静に根拠を示すがおもしろく答える"}
     # みのるの性格
     if analyze_question(question) > 0:
         params[MINORU_NAME] = {"style": "柔軟", "detail": "多面的な視点で優しくアドバイス"}
