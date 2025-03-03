@@ -16,7 +16,7 @@ st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
 # ------------------------------------------------------------------
-# 2. config.toml の読み込み（テーマ設定）
+# 2. config.toml の読み込み（同じディレクトリにある場合）
 # ------------------------------------------------------------------
 try:
     try:
@@ -49,6 +49,32 @@ st.markdown(
         font-family: {font}, sans-serif;
         color: {textColor};
     }}
+    .chat-container {{
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        background-color: {secondaryBackgroundColor};
+    }}
+    /* チャット履歴用吹き出し（下部表示は廃止） */
+    .chat-bubble {{
+        background-color: #d4f7dc;
+        border-radius: 10px;
+        padding: 8px;
+        display: inline-block;
+        max-width: 80%;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        margin: 4px 0;
+    }}
+    .chat-header {{
+        font-weight: bold;
+        margin-bottom: 4px;
+        color: {primaryColor};
+    }}
+    /* 固定キャラクター表示エリア */
     .character-container {{
         display: flex;
         justify-content: space-around;
@@ -58,7 +84,7 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 吹き出し（キャラクター横に独立して表示） */
+    /* 吹き出し（キャラクターの最新発言） */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.8);
         border: 1px solid #ddd;
@@ -85,15 +111,15 @@ st.markdown(
 st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
 # ------------------------------------------------------------------
-# 5. ユーザー入力（上部）
+# 5. ユーザー入力（サイドバーに収納）
 # ------------------------------------------------------------------
-user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
+user_name = st.sidebar.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+ai_age = st.sidebar.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
-# 6. サイドバー（カスタム機能は廃止）
+# 6. サイドバー情報（その他、カスタム機能廃止）
 # ------------------------------------------------------------------
-st.sidebar.info("※このサイドバーはスマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
+st.sidebar.info("※スマホの場合、画面左上のハンバーガーメニューからサイドバーにアクセスしてください。")
 
 # ------------------------------------------------------------------
 # 7. キャラクター定義（固定メンバー）
@@ -158,7 +184,7 @@ for char in [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]:
 avatar_img_dict[USER_NAME] = "👤"
 
 # ------------------------------------------------------------------
-# 12. 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新メッセージを表示
+# 12. 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新の発言を表示
 # ------------------------------------------------------------------
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
@@ -353,16 +379,15 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# 15. チャット履歴の表示（従来の形式は廃止し、固定キャラクターエリアのみ更新）
+# 15. チャット履歴の表示（下部は廃止し、固定キャラクターエリアのみ更新）
 # ------------------------------------------------------------------
-# ※ここでは下部のチャットバブルは表示せず、上部の固定キャラクターエリアの吹き出しのみを更新する
+# ※ここではユーザーのチャット履歴は表示せず、固定キャラクターエリアの吹き出しのみが更新される
 
 # ------------------------------------------------------------------
 # 16. ユーザー入力の取得（st.chat_input）と会話生成
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # ユーザー入力をセッションに追加
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     if len(st.session_state.messages) == 1:
@@ -376,7 +401,6 @@ if user_input:
         )
         discussion = continue_discussion(user_input, history)
     
-    # Gemini API から返された各キャラクターの発言をセッションに追加
     for line in discussion.split("\n"):
         line = line.strip()
         if line:
@@ -384,6 +408,5 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
-    
-    # 固定キャラクター表示エリアを再表示するため、ページ全体を再描画させる（自動リフレッシュにより更新）
+    # ページ再描画により固定キャラクターエリアの吹き出しが更新される
     st.experimental_rerun()
