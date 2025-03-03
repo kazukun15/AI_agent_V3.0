@@ -59,7 +59,7 @@ st.markdown(
         margin-bottom: 20px;
         background-color: {secondaryBackgroundColor};
     }}
-    /* 吹き出し用スタイル（チャット履歴用） */
+    /* チャット履歴用吹き出し */
     .chat-bubble {{
         background-color: #d4f7dc;
         border-radius: 10px;
@@ -75,7 +75,7 @@ st.markdown(
         margin-bottom: 4px;
         color: {primaryColor};
     }}
-    /* 固定キャラクターエリア */
+    /* 固定キャラクター表示エリア */
     .character-container {{
         display: flex;
         justify-content: space-around;
@@ -137,7 +137,7 @@ NEW_CHAR_NAME = "new_character"
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-# ※新キャラクターはサイドバーの設定で指定がなければランダム生成
+# ※新キャラクターはサイドバー設定で指定がなければランダム生成
 
 # ------------------------------------------------------------------
 # セッション初期化（チャット履歴）
@@ -166,7 +166,7 @@ if current_time - st.session_state.last_event_time > event_interval:
     st.session_state.last_event_time = current_time
 
 # ------------------------------------------------------------------
-# 固定キャラクター表示エリア（画面上部）
+# 固定キャラクター表示エリア（上部）：各キャラクターの画像と最新メッセージを表示
 # ------------------------------------------------------------------
 def get_latest_message(char_role):
     for msg in reversed(st.session_state.messages):
@@ -182,8 +182,6 @@ def get_latest_message(char_role):
 
 st.markdown("<div class='character-container'>", unsafe_allow_html=True)
 cols = st.columns(4)
-
-# yukari
 with cols[0]:
     try:
         img = Image.open("avatars/yukari.png")
@@ -194,8 +192,6 @@ with cols[0]:
     else:
         st.write("yukari")
     st.markdown(f"<div class='character-message'><strong>{YUKARI_NAME}</strong><br>{get_latest_message(YUKARI_NAME)}</div>", unsafe_allow_html=True)
-
-# shinya
 with cols[1]:
     try:
         img = Image.open("avatars/shinya.png")
@@ -206,8 +202,6 @@ with cols[1]:
     else:
         st.write("shinya")
     st.markdown(f"<div class='character-message'><strong>{SHINYA_NAME}</strong><br>{get_latest_message(SHINYA_NAME)}</div>", unsafe_allow_html=True)
-
-# minoru
 with cols[2]:
     try:
         img = Image.open("avatars/minoru.png")
@@ -218,15 +212,11 @@ with cols[2]:
     else:
         st.write("minoru")
     st.markdown(f"<div class='character-message'><strong>{MINORU_NAME}</strong><br>{get_latest_message(MINORU_NAME)}</div>", unsafe_allow_html=True)
-
-# new_character
 with cols[3]:
-    # 新キャラクター：サイドバーで指定があれば使用、なければランダム
     if custom_new_char_name.strip() and custom_new_char_personality.strip():
         new_char_name = custom_new_char_name.strip()
-        new_char_default = custom_new_char_personality.strip()
     else:
-        new_char_name, new_char_default = ("new_character", "よろしくね！")
+        new_char_name = NEW_CHAR_NAME
     try:
         img = Image.open("avatars/new_character.png")
     except:
@@ -277,6 +267,9 @@ def call_gemini_api(prompt: str) -> str:
     except Exception as e:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
+# ------------------------------------------------------------------
+# 会話生成関連関数
+# ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
@@ -374,18 +367,21 @@ def generate_summary(discussion: str) -> str:
 # ------------------------------------------------------------------
 # チャット履歴の表示（従来の形式）
 # ------------------------------------------------------------------
+# st.chat_message は role が "user" または "assistant" 以外だとエラーになるため、
+# それ以外の場合は表示用に "assistant" として扱います。
 for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
+    # role_for_chat は "user" と "assistant" の場合はそのまま、その他は "assistant" に変換
+    role_for_chat = role if role in ["user", "assistant"] else "assistant"
     display_name = st.session_state.get("user_name", "ユーザー") if role == "user" else role
-    if role == "user":
-        with st.chat_message(role, avatar="👤"):
+    with st.chat_message(role_for_chat, avatar=avatar_img_dict.get(role, "🤖")):
+        if role == "user":
             st.markdown(
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                 unsafe_allow_html=True,
             )
-    else:
-        with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+        else:
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                 unsafe_allow_html=True,
@@ -421,15 +417,15 @@ if user_input:
             role = parts[0]
             content = parts[1].strip() if len(parts) > 1 else ""
             st.session_state.messages.append({"role": role, "content": content})
+            role_for_chat = role if role in ["user", "assistant"] else "assistant"
             display_name = st.session_state.get("user_name", "ユーザー") if role == "user" else role
-            if role == "user":
-                with st.chat_message(role, avatar="👤"):
+            with st.chat_message(role_for_chat, avatar=avatar_img_dict.get(role, "🤖")):
+                if role == "user":
                     st.markdown(
                         f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                         unsafe_allow_html=True,
                     )
-            else:
-                with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                else:
                     st.markdown(
                         f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                         unsafe_allow_html=True,
