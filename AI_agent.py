@@ -7,7 +7,6 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
-from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
 # ==========================
 # ヘルパー関数
@@ -45,14 +44,14 @@ def img_to_base64(img: Image.Image) -> str:
 # ==========================
 # 定数・初期設定
 # ==========================
-# キャラクター名（ひらがな／日本語）
+# キャラクター名（すべてひらがな／日本語）
 USER_NAME = "user"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "あたらしいともだち"
+NEW_CHAR_NAME = "新キャラクター"
 
-# Gemini API 用キャラクターリスト（あたらしいともだち以外）
+# Gemini API 用キャラクターリスト（新キャラクター以外）
 CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ==========================
@@ -81,14 +80,14 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 吹き出し（キャラクターの最新発言） */
+    /* 読みやすい吹き出し */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
         border-radius: 10px;
         padding: 12px 16px;
         display: inline-block;
-        max-width: 300px;  /* 横に10文字以上入るよう拡大 */
+        max-width: 300px;
         margin-bottom: 5px;
         font-size: 16px;
         line-height: 1.5;
@@ -97,15 +96,17 @@ st.markdown(
     .character-image {{
         width: 120px;
     }}
+    /* スマホ向けレスポンシブ設定 */
+    @media only screen and (max-width: 768px) {{
+        .character-container {{
+            flex-direction: column;
+            align-items: center;
+        }}
+    }}
     </style>
     """,
     unsafe_allow_html=True
 )
-
-# ==========================
-# 自動リフレッシュ（ライフイベント用）※今回は不要の場合はコメントアウト可能
-# ==========================
-st_autorefresh(interval=30000, limit=1000, key="autorefresh")
 
 # ==========================
 # サイドバー入力（名前とAI年齢）
@@ -151,7 +152,7 @@ if current_time - st.session_state.last_event_time > event_interval:
 # ==========================
 def load_avatars():
     avatar_imgs = {}
-    avatar_imgs[USER_NAME] = "👤"  # ユーザーは絵文字
+    avatar_imgs[USER_NAME] = "👤"
     mapping = {
         YUKARI_NAME: "yukari.png",
         SHINYA_NAME: "shinya.png",
@@ -299,7 +300,7 @@ def generate_discussion(question: str, persona_params: dict, age: int) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
@@ -313,7 +314,7 @@ def continue_discussion(user_input: str, current_discussion: str) -> str:
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        "あたらしいともだち: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
     )
     return call_gemini_api(prompt)
