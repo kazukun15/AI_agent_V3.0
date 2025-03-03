@@ -7,7 +7,6 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
-from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
 # ==========================
 # ヘルパー関数
@@ -75,6 +74,7 @@ st.markdown(
         display: flex;
         justify-content: space-around;
         margin-bottom: 20px;
+        flex-wrap: wrap;
     }}
     .character-wrapper {{
         text-align: center;
@@ -82,19 +82,26 @@ st.markdown(
     }}
     /* 読みやすい吹き出し */
     .speech-bubble {{
-        background: rgba(255, 255, 255, 0.95);  /* 背景をやや不透明に */
+        background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
         border-radius: 10px;
-        padding: 12px 16px;    /* 余白を広めに */
+        padding: 12px 16px;
         display: inline-block;
-        max-width: 160px;      /* 少し幅を広げる */
+        max-width: 160px;
         margin-bottom: 5px;
-        font-size: 16px;       /* 文字サイズを大きく */
-        line-height: 1.5;      /* 行間を広く */
+        font-size: 16px;
+        line-height: 1.5;
         word-wrap: break-word;
     }}
     .character-image {{
         width: 120px;
+    }}
+    /* スマホ向けのレスポンシブ設定 */
+    @media only screen and (max-width: 768px) {{
+        .character-container {{
+            flex-direction: column;
+            align-items: center;
+        }}
     }}
     </style>
     """,
@@ -102,16 +109,11 @@ st.markdown(
 )
 
 # ==========================
-# 自動リフレッシュ（ライフイベント用）
-# ==========================
-st_autorefresh(interval=30000, limit=1000, key="autorefresh")
-
-# ==========================
 # サイドバー入力（名前とAI年齢）
 # ==========================
 user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
-st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
+st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからサイドバーにアクセスしてください。")
 
 # ==========================
 # APIキー、モデル設定
@@ -120,7 +122,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ==========================
-# セッション初期化（チャット履歴）
+# セッション初期化（会話履歴）
 # ==========================
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -150,6 +152,7 @@ if current_time - st.session_state.last_event_time > event_interval:
 # ==========================
 def load_avatars():
     avatar_imgs = {}
+    # ユーザーは絵文字
     avatar_imgs[USER_NAME] = "👤"
     mapping = {
         YUKARI_NAME: "yukari.png",
@@ -188,8 +191,9 @@ def get_latest_message(role_name: str) -> str:
 # ==========================
 def display_characters():
     st.markdown("<div class='character-container'>", unsafe_allow_html=True)
-    cols = st.columns(4)
+    # 4列以上の場合、flex-wrap で自動的に改行
     roles = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
+    cols = st.columns(4)
     for i, role_name in enumerate(roles):
         with cols[i]:
             msg_text = get_latest_message(role_name)
@@ -251,11 +255,11 @@ def call_gemini_api(prompt: str) -> str:
 # ==========================
 def analyze_question(question: str) -> int:
     score = 0
-    for word in ["困った", "悩み", "苦しい", "辛い"]:
-        if word in question:
+    for w in ["困った", "悩み", "苦しい", "辛い"]:
+        if w in question:
             score += 1
-    for word in ["理由", "原因", "仕組み", "方法"]:
-        if word in question:
+    for w in ["理由", "原因", "仕組み", "方法"]:
+        if w in question:
             score -= 1
     return score
 
@@ -269,19 +273,16 @@ def adjust_parameters(question: str, age: int) -> dict:
         params[YUKARI_NAME] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
     else:
         params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験に基づいた落ち着いた回答"}
-
     # しんやの性格
     if analyze_question(question) > 0:
         params[SHINYA_NAME] = {"style": "共感的", "detail": "気持ちに寄り添いながら答える"}
     else:
         params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静に根拠を示して答える"}
-
     # みのるの性格
     if analyze_question(question) > 0:
         params[MINORU_NAME] = {"style": "柔軟", "detail": "多面的な視点で優しくアドバイス"}
     else:
         params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な立場で率直に意見を述べる"}
-
     return params
 
 def generate_new_character() -> tuple:
