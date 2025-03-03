@@ -7,6 +7,7 @@ import json
 import base64
 from io import BytesIO
 from PIL import Image
+from streamlit_autorefresh import st_autorefresh  # 自動リフレッシュ用
 
 # ==========================
 # ヘルパー関数
@@ -80,14 +81,14 @@ st.markdown(
         text-align: center;
         margin: 10px;
     }}
-    /* 読みやすい吹き出し */
+    /* 吹き出し（キャラクターの最新発言） */
     .speech-bubble {{
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #ccc;
         border-radius: 10px;
         padding: 12px 16px;
         display: inline-block;
-        max-width: 160px;
+        max-width: 300px;  /* 横に10文字以上入るよう拡大 */
         margin-bottom: 5px;
         font-size: 16px;
         line-height: 1.5;
@@ -96,24 +97,22 @@ st.markdown(
     .character-image {{
         width: 120px;
     }}
-    /* スマホ向けのレスポンシブ設定 */
-    @media only screen and (max-width: 768px) {{
-        .character-container {{
-            flex-direction: column;
-            align-items: center;
-        }}
-    }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # ==========================
+# 自動リフレッシュ（ライフイベント用）※今回は不要の場合はコメントアウト可能
+# ==========================
+st_autorefresh(interval=30000, limit=1000, key="autorefresh")
+
+# ==========================
 # サイドバー入力（名前とAI年齢）
 # ==========================
 user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
 ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
-st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからサイドバーにアクセスしてください。")
+st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
 
 # ==========================
 # APIキー、モデル設定
@@ -122,7 +121,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ==========================
-# セッション初期化（会話履歴）
+# セッション初期化（チャット履歴）
 # ==========================
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -152,8 +151,7 @@ if current_time - st.session_state.last_event_time > event_interval:
 # ==========================
 def load_avatars():
     avatar_imgs = {}
-    # ユーザーは絵文字
-    avatar_imgs[USER_NAME] = "👤"
+    avatar_imgs[USER_NAME] = "👤"  # ユーザーは絵文字
     mapping = {
         YUKARI_NAME: "yukari.png",
         SHINYA_NAME: "shinya.png",
@@ -191,9 +189,8 @@ def get_latest_message(role_name: str) -> str:
 # ==========================
 def display_characters():
     st.markdown("<div class='character-container'>", unsafe_allow_html=True)
-    # 4列以上の場合、flex-wrap で自動的に改行
-    roles = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
     cols = st.columns(4)
+    roles = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
     for i, role_name in enumerate(roles):
         with cols[i]:
             msg_text = get_latest_message(role_name)
