@@ -15,10 +15,6 @@ from transformers import AutoFeatureExtractor, ViTForImageClassification
 
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
-# ▼ インターネット検索用（webツールを利用）
-import web
-# ▲
-
 # ------------------------------------------------------------------
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
@@ -248,18 +244,24 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
-# インターネット検索結果取得（ユーザーの質問に基づく）
+# インターネット検索結果取得（DuckDuckGo API利用）
 # ------------------------------------------------------------------
 def get_search_info(query: str) -> str:
-    # Web検索を行い、結果を要約して返す。
-    # ここではシンプルに web.search を呼び出し、結果の最初の要素から概要を抽出する例です。
-    search_results = web.search(query=query)
-    # 実際の実装では、複数の結果を解析・統合して要約する処理を入れると良いです。
-    # ここでは仮に結果のテキストをそのまま返す例です。
-    # ※ユーザーには「最新情報」として自然に組み込まれます。
-    if search_results and "text" in search_results[0]:
-        return search_results[0]["text"]
-    return ""
+    url = "https://api.duckduckgo.com/"
+    params = {
+        "q": query,
+        "format": "json",
+        "no_html": 1,
+        "skip_disambig": 1,
+    }
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        # AbstractText に簡単な要約が入っていることが多い
+        result = data.get("AbstractText", "")
+        return result
+    except Exception as e:
+        return ""
 
 # ------------------------------------------------------------------
 # 会話生成関連の関数
@@ -321,7 +323,6 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int, search
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     if search_info:
-        # 検索結果を自然に会話に組み込む
         prompt += f"最新の情報によると、{search_info}という報告があります。\n"
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
     for name, params in persona_params.items():
@@ -360,7 +361,7 @@ def continue_discussion(additional_input: str, current_discussion: str, search_i
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     """
     画像アップロード後、その画像に関連しそうな話題を友達が始めるプロンプトを生成する。
-    解析結果の詳細ではなく、画像から連想されるエピソードや印象などを自然に話し合ってください。
+    解析結果の詳細な分析は行わず、画像から連想されるエピソードや印象を話すように促す。
     """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
@@ -368,7 +369,7 @@ def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"画像の推定結果: {analysis_text}\n\n"
         "この画像に関連しそうな話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
-        "画像の内容そのものを詳細に分析するのではなく、その画像を見たときの印象や、連想されるエピソードを自然に話してください。\n"
+        "画像の内容そのものの詳細な分析ではなく、画像を見たときの印象や連想されるエピソードを自由に話してください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -387,15 +388,23 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# インターネット検索実行（回答前に検索し、その結果を自然に組み込む）
+# インターネット検索実行（DuckDuckGo API利用）
 # ------------------------------------------------------------------
 def get_search_info(query: str) -> str:
-    # web.search を用いてインターネット検索を実行
-    results = web.search(query=query)
-    # ここでは結果の最初の1件からテキストを抽出する例です
-    if results and "text" in results[0]:
-        return results[0]["text"]
-    return ""
+    url = "https://api.duckduckgo.com/"
+    params = {
+        "q": query,
+        "format": "json",
+        "no_html": 1,
+        "skip_disambig": 1,
+    }
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        result = data.get("AbstractText", "")
+        return result
+    except Exception as e:
+        return ""
 
 # ------------------------------------------------------------------
 # 1) 既存のチャットメッセージを表示
@@ -469,7 +478,7 @@ if uploaded_image is not None:
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # まずインターネット検索を実行（検索結果は内部的に組み込む）
+    # インターネット検索を実行して最新情報を取得
     search_info = get_search_info(user_input)
     
     if st.session_state.get("quiz_active", False):
@@ -491,7 +500,6 @@ if user_input:
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
-        # ユーザー発話時、最新情報（検索結果）を取得してプロンプトに組み込む
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion(user_input, persona_params, ai_age, search_info=search_info)
