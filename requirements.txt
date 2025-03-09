@@ -1,6 +1,8 @@
 streamlit
+streamlit-chat
 requests
+torch
+torchvision
+transformers
 Pillow
 toml
-httpx
-streamlit-chat
