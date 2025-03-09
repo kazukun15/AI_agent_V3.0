@@ -498,7 +498,7 @@ if uploaded_image is not None:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(1, 3))  # ランダムな遅延
+                time.sleep(random.uniform(3, 8))  # ランダムな遅延
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
