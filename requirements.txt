@@ -6,4 +6,3 @@ torchvision
 transformers
 Pillow
 toml
-web
