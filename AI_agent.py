@@ -1,418 +1,341 @@
 import streamlit as st
-import requests
 import re
 import random
-import time
 import json
-import base64
-from io import BytesIO
 from PIL import Image
+import toml
+import asyncio
+import httpx
+from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
-# ==========================
-# ヘルパー関数
-# ==========================
-def load_config():
-    try:
-        try:
-            import tomllib  # Python 3.11以降用
-        except ImportError:
-            import toml as tomllib
-        with open("config.toml", "rb") as f:
-            config = tomllib.load(f)
-        theme_config = config.get("theme", {})
-        return {
-            "primaryColor": theme_config.get("primaryColor", "#729075"),
-            "backgroundColor": theme_config.get("backgroundColor", "#f1ece3"),
-            "secondaryBackgroundColor": theme_config.get("secondaryBackgroundColor", "#fff8ef"),
-            "textColor": theme_config.get("textColor", "#5e796a"),
-            "font": theme_config.get("font", "monospace")
-        }
-    except Exception:
-        return {
-            "primaryColor": "#729075",
-            "backgroundColor": "#f1ece3",
-            "secondaryBackgroundColor": "#fff8ef",
-            "textColor": "#5e796a",
-            "font": "monospace"
-        }
+# ------------------------
+# .streamlit/config.toml の読み込み（任意）
+# ------------------------
+try:
+    config = toml.load(".streamlit/config.toml")
+except Exception as e:
+    st.error(f".streamlit/config.toml の読み込みに失敗しました: {e}")
+    config = {}
+API_KEY = config.get("general", {}).get("api_key", st.secrets["general"]["api_key"])
+MODEL_NAME = config.get("general", {}).get("model_name", "gemini-2.0-flash-001")
 
-def img_to_base64(img: Image.Image) -> str:
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
-
-# ==========================
-# 定数・初期設定
-# ==========================
-# キャラクター名（すべてひらがな／日本語）
-USER_NAME = "user"
-YUKARI_NAME = "ゆかり"
-SHINYA_NAME = "しんや"
-MINORU_NAME = "みのる"
-# 「新キャラクター」を「あたらしいともだち」に変更
-NEW_CHAR_NAME = "あたらしいともだち"
-
-# Gemini API 用キャラクターリスト（あたらしいともだちは含まず）
-CHARACTER_LIST = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-
-# ==========================
-# 会話生成関連関数
-# ==========================
-def analyze_question(question: str) -> int:
-    score = 0
-    for w in ["困った", "悩み", "苦しい", "辛い"]:
-        if w in question:
-            score += 1
-    for w in ["理由", "原因", "仕組み", "方法"]:
-        if w in question:
-            score -= 1
-    return score
-
-def adjust_parameters(question: str, age: int) -> dict:
-    score = analyze_question(question)
-    params = {}
-    # ゆかりの性格
-    if age < 30:
-        params[YUKARI_NAME] = {"style": "明るくフレンドリー", "detail": "若々しいエネルギーと笑顔で親しみやすく答える"}
-    elif age < 50:
-        params[YUKARI_NAME] = {"style": "温かみのある", "detail": "経験を生かし、柔らかい口調でバランスの取れた回答をする"}
-    else:
-        params[YUKARI_NAME] = {"style": "穏やかで包容力のある", "detail": "長い経験に裏打ちされた落ち着きと優しさで答える"}
-    # しんやの性格
-    if analyze_question(question) > 0:
-        params[SHINYA_NAME] = {"style": "共感力にあふれる", "detail": "相手の気持ちを理解し、温かい言葉で寄り添う回答をする"}
-    else:
-        params[SHINYA_NAME] = {"style": "冷静かつ論理的", "detail": "事実やデータをもとに、しっかりと根拠を示しながらも柔らかい口調で答える"}
-    # みのるの性格
-    if analyze_question(question) > 0:
-        params[MINORU_NAME] = {"style": "柔らかく親しみやすい", "detail": "多角的な視点で、優しいアドバイスや提案をする"}
-    else:
-        params[MINORU_NAME] = {"style": "客観的で現実的", "detail": "冷静かつ中立的な立場で、正確な情報を分かりやすく伝える"}
-    return params
-
-def generate_new_character() -> tuple:
-    return (NEW_CHAR_NAME, "よろしくね！")
-
-def call_gemini_api(prompt: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    headers = {"Content-Type": "application/json"}
-    try:
-        r = requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        return f"エラー: リクエスト送信時に例外が発生 -> {str(e)}"
-    if r.status_code != 200:
-        return f"エラー: ステータスコード {r.status_code} -> {r.text}"
-    try:
-        rjson = r.json()
-        candidates = rjson.get("candidates", [])
-        if not candidates:
-            return "回答が見つかりませんでした。(candidatesが空)"
-        candidate0 = candidates[0]
-        content_val = candidate0.get("content", "")
-        if isinstance(content_val, dict):
-            parts = content_val.get("parts", [])
-            content_str = " ".join([p.get("text", "") for p in parts])
-        else:
-            content_str = str(content_val)
-        content_str = content_str.strip()
-        if not content_str:
-            return "回答が見つかりませんでした。(contentが空)"
-        return re.sub(r"'parts': \[\{'text':.*?\}\], 'role': 'model'", "", content_str, flags=re.DOTALL).strip()
-    except Exception as e:
-        return f"エラー: レスポンス解析に失敗 -> {str(e)}"
-
-def generate_discussion(question: str, persona_params: dict, age: int) -> str:
-    current_user = st.session_state.get("user_name", "ユーザー")
-    prompt = f"【{current_user}さんの質問】\n{question}\n\n"
-    prompt += f"このAIは{age}歳として振る舞います。\n"
-    for name, params in persona_params.items():
-        prompt += f"{name}は【{params['style']}】な視点で、{params['detail']}。\n"
-    new_name, new_personality = generate_new_character()
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
-    prompt += (
-        "\n4人が友達同士のように自然な会話をしてください。\n"
-        "出力形式は以下の通り:\n"
-        "ゆかり: 発言内容\n"
-        "しんや: 発言内容\n"
-        "みのる: 発言内容\n"
-        f"{NEW_CHAR_NAME}: 発言内容\n"
-        "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
-    )
-    return call_gemini_api(prompt)
-
-def continue_discussion(user_input: str, current_discussion: str) -> str:
-    prompt = (
-        f"これまでの会話:\n{current_discussion}\n\n"
-        f"ユーザーの追加発言: {user_input}\n\n"
-        "4人が友達同士のように、必ず全員が一度以上発言を続けてください。\n"
-        "出力形式:\n"
-        "ゆかり: 発言内容\n"
-        "しんや: 発言内容\n"
-        "みのる: 発言内容\n"
-        f"{NEW_CHAR_NAME}: 発言内容\n"
-        "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
-    )
-    return call_gemini_api(prompt)
-
-def generate_summary(discussion: str) -> str:
-    prompt = (
-        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
-        "自然な日本語文で出力し、余計なJSON形式は不要です。"
-    )
-    return call_gemini_api(prompt)
-
-# ==========================
+# ------------------------
 # ページ設定
-# ==========================
+# ------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
 st.title("ぼくのともだち V3.0")
 
-config_values = load_config()
-st.markdown(f"""
+# ------------------------
+# 背景・共通スタイルの設定
+# ------------------------
+st.markdown(
+    """
     <style>
-    body {{
-        background-color: {config_values['backgroundColor']};
-        font-family: {config_values['font']}, sans-serif;
-        color: {config_values['textColor']};
-    }}
-    .character-container {{
-        display: flex;
-        justify-content: space-around;
+    body {
+        background-color: #e9edf5;
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    .chat-container {
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
         margin-bottom: 20px;
-        flex-wrap: wrap;
-    }}
-    .character-wrapper {{
-        text-align: center;
-        margin: 10px;
-    }}
-    .speech-bubble {{
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid #ccc;
+        background-color: #ffffffaa;
+    }
+    /* バブルチャット用のスタイル */
+    .chat-bubble {
+        background-color: #d4f7dc;
         border-radius: 10px;
-        padding: 12px 16px;
+        padding: 8px;
         display: inline-block;
-        max-width: 300px;
-        margin-bottom: 5px;
-        font-size: 16px;
-        line-height: 1.5;
+        max-width: 80%;
         word-wrap: break-word;
-    }}
-    .character-image {{
-        width: 120px;
-    }}
-    @media only screen and (max-width: 768px) {{
-        .character-container {{
-            flex-direction: column;
-            align-items: center;
-        }}
-    }}
+        white-space: pre-wrap;
+        margin: 4px 0;
+    }
+    .chat-header {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
 
-# ==========================
-# サイドバー入力
-# ==========================
-user_name = st.sidebar.text_input("あなたの名前", value="ユーザー", key="user_name")
-ai_age = st.sidebar.number_input("AIの年齢", min_value=1, value=30, step=1, key="ai_age")
-st.sidebar.info("スマホの場合、画面左上のハンバーガーメニューからアクセスしてください。")
+# ------------------------
+# ユーザーの名前入力（上部）
+# ------------------------
+user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 
-# ==========================
-# APIキー、モデル設定
-# ==========================
-API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
+# ------------------------
+# キャラクター定義
+# ------------------------
+USER_NAME = "user"
+ASSISTANT_NAME = "assistant"
+YUKARI_NAME = "ゆかり"
+SHINYA_NAME = "しんや"
+MINORU_NAME = "みのる"
+NEW_CHAR_NAME = "新キャラクター"
 
-# ==========================
-# セッション初期化（会話履歴）
-# ==========================
+# ------------------------
+# 友達として利用するキャラクターリスト
+# ------------------------
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+# ※新キャラクターは generate_new_character() で動的に決定
+
+# ------------------------
+# セッション初期化（チャット履歴：messages）
+# ------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==========================
-# ライフイベント自動生成（30秒毎、デモ用）
-# ==========================
-if "last_event_time" not in st.session_state:
-    st.session_state.last_event_time = time.time()
-event_interval = 30
-current_time = time.time()
-if current_time - st.session_state.last_event_time > event_interval:
-    events = [
-        "ちょっと散歩してきたよ。",
-        "お茶を飲んでリラックス中。",
-        "少しお昼寝してたの。",
-        "ニュースをチェックしてるよ。",
-        "運動して汗かいちゃった！"
-    ]
-    msg = random.choice(events)
-    who = random.choice(CHARACTER_LIST)
-    st.session_state.messages.append({"role": who, "content": msg})
-    st.session_state.last_event_time = current_time
+# ------------------------
+# アイコン画像の読み込み（画像は AI_agent_Ver2.0/avatars/ に配置）
+# ------------------------
+try:
+    img_user = Image.open("AI_agent_Ver2.0/avatars/user.png")
+    img_yukari = Image.open("AI_agent_Ver2.0/avatars/yukari.png")
+    img_shinya = Image.open("AI_agent_Ver2.0/avatars/shinya.png")
+    img_minoru = Image.open("AI_agent_Ver2.0/avatars/minoru.png")
+    img_newchar = Image.open("AI_agent_Ver2.0/avatars/new_character.png")
+except Exception as e:
+    st.error(f"画像読み込みエラー: {e}")
+    img_user = "👤"
+    img_yukari = "🌸"
+    img_shinya = "🌊"
+    img_minoru = "🍀"
+    img_newchar = "⭐"
 
-# ==========================
-# キャラクター画像の読み込み
-# ==========================
-def load_avatars():
-    avatar_imgs = {}
-    avatar_imgs[USER_NAME] = "👤"
-    mapping = {
-        YUKARI_NAME: "yukari.png",
-        SHINYA_NAME: "shinya.png",
-        MINORU_NAME: "minoru.png",
-        NEW_CHAR_NAME: "new_character.png"
-    }
-    for role, fname in mapping.items():
+avatar_img_dict = {
+    USER_NAME: img_user,
+    YUKARI_NAME: img_yukari,
+    SHINYA_NAME: img_shinya,
+    MINORU_NAME: img_minoru,
+    NEW_CHAR_NAME: img_newchar,
+    ASSISTANT_NAME: "🤖",  # 絵文字で代用
+}
+
+# ------------------------
+# Gemini API 呼び出し関数（非同期処理）
+# ------------------------
+def remove_json_artifacts(text: str) -> str:
+    if not isinstance(text, str):
+        text = str(text) if text else ""
+    pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
+    cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
+    return cleaned.strip()
+
+async def async_call_gemini_api(prompt: str) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    headers = {"Content-Type": "application/json"}
+    async with httpx.AsyncClient() as client:
         try:
-            img = Image.open(f"avatars/{fname}")
-            avatar_imgs[role] = img
+            response = await client.post(url, json=payload, headers=headers)
         except Exception as e:
-            st.error(f"{role} の画像読み込みエラー: {e}")
-            avatar_imgs[role] = None
-    return avatar_imgs
-
-avatar_img_dict = load_avatars()
-
-# ==========================
-# 最新の発言取得関数
-# ==========================
-def get_latest_message(role_name: str) -> str:
-    for msg in reversed(st.session_state.messages):
-        if msg["role"] == role_name:
-            return msg["content"]
-    defaults = {
-        YUKARI_NAME: "こんにちは！",
-        SHINYA_NAME: "やあ、調子はどう？",
-        MINORU_NAME: "元気だよ！",
-        NEW_CHAR_NAME: "はじめまして！"
-    }
-    return defaults.get(role_name, "・・・")
-
-# ==========================
-# 固定キャラクター表示エリア
-# ==========================
-def display_characters():
-    st.markdown("<div class='character-container'>", unsafe_allow_html=True)
-    cols = st.columns(4)
-    roles = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME, NEW_CHAR_NAME]
-    for i, role_name in enumerate(roles):
-        with cols[i]:
-            msg_text = get_latest_message(role_name)
-            avatar = avatar_img_dict.get(role_name, None)
-            if isinstance(avatar, Image.Image):
-                base64_str = img_to_base64(avatar)
-                st.markdown(f"""
-                    <div class="character-wrapper">
-                        <div class="speech-bubble">{msg_text}</div>
-                        <img src="data:image/png;base64,{base64_str}" class="character-image">
-                        <div><strong>{role_name}</strong></div>
-                    </div>
-                """, unsafe_allow_html=True)
+            return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
+        if response.status_code != 200:
+            return f"エラー: ステータスコード {response.status_code} -> {response.text}"
+        try:
+            rjson = response.json()
+            candidates = rjson.get("candidates", [])
+            if not candidates:
+                return "回答が見つかりませんでした。(candidatesが空)"
+            candidate0 = candidates[0]
+            content_val = candidate0.get("content", "")
+            if isinstance(content_val, dict):
+                parts = content_val.get("parts", [])
+                content_str = " ".join([p.get("text", "") for p in parts])
             else:
-                st.write(role_name)
-                st.markdown(f"<div class='speech-bubble'>{msg_text}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+                content_str = str(content_val)
+            content_str = content_str.strip()
+            if not content_str:
+                return "回答が見つかりませんでした。(contentが空)"
+            return remove_json_artifacts(content_str)
+        except Exception as e:
+            return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
-# ==========================
+def call_gemini_api(prompt: str) -> str:
+    return asyncio.run(async_call_gemini_api(prompt))
+
+# ------------------------
 # 会話生成関連関数
-# ==========================
-def generate_discussion(question: str, persona_params: dict, age: int) -> str:
+# ------------------------
+def analyze_question(question: str) -> int:
+    score = 0
+    keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
+    keywords_logical = ["理由", "原因", "仕組み", "方法"]
+    for word in keywords_emotional:
+        if re.search(word, question):
+            score += 1
+    for word in keywords_logical:
+        if re.search(word, question):
+            score -= 1
+    return score
+
+def adjust_parameters(question: str) -> dict:
+    score = analyze_question(question)
+    params = {}
+    params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "楽しい雰囲気で元気な回答"}
+    if score > 0:
+        params[SHINYA_NAME] = {"style": "共感的", "detail": "心情を重視した解説"}
+        params[MINORU_NAME] = {"style": "柔軟", "detail": "状況に合わせた多面的な視点"}
+    else:
+        params[SHINYA_NAME] = {"style": "分析的", "detail": "データや事実を踏まえた説明"}
+        params[MINORU_NAME] = {"style": "客観的", "detail": "中立的な視点からの考察"}
+    return params
+
+def generate_new_character() -> tuple:
+    candidates = [
+        ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
+        ("さとる", "率直で、現実を適切に指摘する"),
+        ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
+        ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
+        ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
+    ]
+    return random.choice(candidates)
+
+def generate_discussion(question: str, persona_params: dict) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
-    prompt += f"このAIは{age}歳として振る舞います。\n"
     for name, params in persona_params.items():
-        prompt += f"{name}は【{params['style']}】な視点で、{params['detail']}。\n"
+        prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。4人全員が必ず順番に一度以上発言してください。\n"
+    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
     prompt += (
-        "\n4人が友達同士のように自然な会話をしてください。\n"
-        "出力形式は以下の通り:\n"
+        "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
+        "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        f"{NEW_CHAR_NAME}: 発言内容\n"
-        "必ず4人全員が発言し、余計なJSON形式は入れず、自然な日本語のみで出力してください。"
+        f"{new_name}: 発言内容\n"
+        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
-def continue_discussion(user_input: str, current_discussion: str) -> str:
+def continue_discussion(additional_input: str, current_discussion: str) -> str:
     prompt = (
-        f"これまでの会話:\n{current_discussion}\n\n"
-        f"ユーザーの追加発言: {user_input}\n\n"
-        "4人が友達同士のように、必ず全員が一度以上発言を続けてください。\n"
-        "出力形式:\n"
+        "これまでの会話:\n" + current_discussion + "\n\n" +
+        "ユーザーの追加発言: " + additional_input + "\n\n" +
+        "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
+        "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        f"{NEW_CHAR_NAME}: 発言内容\n"
-        "余計なJSON形式は入れず、自然な日本語のみで出力してください。"
+        "新キャラクター: 発言内容\n"
+        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は4人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
 
-def call_gemini_api(prompt: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    headers = {"Content-Type": "application/json"}
-    try:
-        r = requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        return f"エラー: リクエスト送信時に例外が発生 -> {str(e)}"
-    if r.status_code != 200:
-        return f"エラー: ステータスコード {r.status_code} -> {r.text}"
-    try:
-        rjson = r.json()
-        candidates = rjson.get("candidates", [])
-        if not candidates:
-            return "回答が見つかりませんでした。(candidatesが空)"
-        candidate0 = candidates[0]
-        content_val = candidate0.get("content", "")
-        if isinstance(content_val, dict):
-            parts = content_val.get("parts", [])
-            content_str = " ".join([p.get("text", "") for p in parts])
+def display_chat_log(chat_log: list):
+    """
+    chat_log の各メッセージを、LINE風のチャットバブル形式で表示する。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示され、テキストは自動で折り返されます。
+    最新のメッセージが入力バーの直上に表示されるよう、チャットログは逆順に表示します。
+    """
+    from streamlit_chat import message as st_message
+    for msg in reversed(chat_log):
+        # "role"/"content" または "sender"/"message" に対応
+        sender = msg.get("role", msg.get("sender", "不明"))
+        text = msg.get("content", msg.get("message", ""))
+        if sender == "user":
+            st_message(text, is_user=True)
         else:
-            content_str = str(content_val)
-        content_str = content_str.strip()
-        if not content_str:
-            return "回答が見つかりませんでした。(contentが空)"
-        return re.sub(r"'parts': \[\{'text':.*?\}\], 'role': 'model'", "", content_str, flags=re.DOTALL).strip()
-    except Exception as e:
-        return f"エラー: レスポンス解析に失敗 -> {str(e)}"
+            st_message(f"{sender}: {text}", is_user=False)
 
-# ==========================
-# ユーザー入力と会話生成
-# ==========================
-user_input = st.chat_input("何か質問や話したいことがありますか？")
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+# ------------------------
+# 初回会話の自動生成は削除（ユーザーが発言したときのみ応答）
+# ------------------------
+
+# ------------------------
+# 固定フッター（入力エリア）の配置
+# ------------------------
+with st.container():
+    st.markdown(
+        '<div style="position: fixed; bottom: 0; width: 100%; background: #FFF; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">',
+        unsafe_allow_html=True,
+    )
+    with st.form("chat_form", clear_on_submit=True):
+        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
+        col1, col2 = st.columns(2)
+        with col1:
+            send_button = st.form_submit_button("送信")
+        with col2:
+            continue_button = st.form_submit_button("続きを話す")
+    st.markdown("</div>", unsafe_allow_html=True)
     
-    if len(st.session_state.messages) == 1:
-        persona_params = adjust_parameters(user_input, ai_age)
-        discussion = generate_discussion(user_input, persona_params, ai_age)
-    else:
-        history = "\n".join(
-            f'{m["role"]}: {m["content"]}' for m in st.session_state.messages if m["role"] in CHARACTER_LIST or m["role"] == NEW_CHAR_NAME
-        )
-        discussion = continue_discussion(user_input, history)
-    
-    for line in discussion.split("\n"):
-        line = line.strip()
-        if line:
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                role, content = parts[0].strip(), parts[1].strip()
+    # 送信ボタンの処理
+    if send_button:
+        if user_input.strip():
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            if len(st.session_state.messages) == 1:
+                persona_params = adjust_parameters(user_input)
+                discussion = generate_discussion(user_input, persona_params)
             else:
-                role, content = "assistant", line
-            st.session_state.messages.append({"role": role, "content": content})
+                history = "\n".join(
+                    f'{msg["role"]}: {msg["content"]}'
+                    for msg in st.session_state.messages
+                    if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
+                )
+                discussion = continue_discussion(user_input, history)
+            for line in discussion.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    role = parts[0]
+                    content = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state.messages.append({"role": role, "content": content})
+        else:
+            st.warning("発言を入力してください。")
+    
+    # 続きを話すボタンの処理
+    if continue_button:
+        if st.session_state.messages:
+            default_input = "続きをお願いします。"
+            history = "\n".join(
+                f'{msg["role"]}: {msg["content"]}'
+                for msg in st.session_state.messages
+                if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
+            )
+            new_discussion = continue_discussion(default_input, history)
+            for line in new_discussion.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    role = parts[0]
+                    content = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state.messages.append({"role": role, "content": content})
+        else:
+            st.warning("まずは会話を開始してください。")
 
-# ==========================
-# 固定キャラクター表示エリアの更新
-# ==========================
-display_characters()
+# ------------------------
+# 会話ウィンドウの表示
+# ------------------------
+st.header("会話履歴")
+if st.session_state.messages:
+    for msg in reversed(st.session_state.messages):
+        display_name = user_name if msg["role"] == "user" else msg["role"]
+        if msg["role"] == "user":
+            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+                st.markdown(
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
