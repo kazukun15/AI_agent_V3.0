@@ -95,11 +95,11 @@ if "messages" not in st.session_state:
 # アイコン画像の読み込み（画像は AI_agent_ver3.0/avatars/ に配置）
 # ------------------------
 try:
-    img_user = Image.open("AI_agent_ver3.0/avatars/user.png")
-    img_yukari = Image.open("AI_agent_ver3.0/avatars/yukari.png")
-    img_shinya = Image.open("AI_agent_ver3.0/avatars/shinya.png")
-    img_minoru = Image.open("AI_agent_ver3.0/avatars/minoru.png")
-    img_newchar = Image.open("AI_agent_ver3.0/avatars/new_character.png")
+    img_user = Image.open("AI_agent_Ver3.0/avatars/user.png")
+    img_yukari = Image.open("AI_agent_Ver3.0/avatars/yukari.png")
+    img_shinya = Image.open("AI_agent_Ver3.0/avatars/shinya.png")
+    img_minoru = Image.open("AI_agent_Ver3.0/avatars/minoru.png")
+    img_newchar = Image.open("AI_agent_Ver3.0/avatars/new_character.png")
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
     img_user = "👤"
