@@ -1,13 +1,12 @@
 import os
 import streamlit as st
-import requests
 import re
 import random
 import json
-from PIL import Image
 import toml
 import asyncio
 import httpx
+from PIL import Image
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
 # ------------------------
@@ -95,9 +94,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------
-# アイコン画像の読み込み（画像は AI_agent_Ver3.0/avatars/ ではなく、正確には "AI_agent_Ver2.0/avatars/" に配置）
+# アイコン画像の読み込み（画像は AI_agent_V3.0/avatars/ に配置）
 # ------------------------
-base_avatar_path = os.path.join("AI_agent_Ver2.0", "avatars")
+base_avatar_path = os.path.join("AI_agent_V3.0", "avatars")
 try:
     img_user = Image.open(os.path.join(base_avatar_path, "user.png"))
     img_yukari = Image.open(os.path.join(base_avatar_path, "yukari.png"))
@@ -132,6 +131,7 @@ def remove_json_artifacts(text: str) -> str:
     return cleaned.strip()
 
 async def async_call_gemini_api(prompt: str) -> str:
+    import httpx  # 念のため再importしてもOK
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json"}
@@ -194,7 +194,7 @@ def adjust_parameters(question: str) -> dict:
 def generate_new_character() -> tuple:
     candidates = [
         ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-        ("さとる", "率直で、現実を適切に指摘する"),
+        ("さとる", "率直で、現実を適切に指摘する"),  # ユーザーを不快にさせない表現に変更
         ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
         ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
         ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
@@ -236,7 +236,7 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 def generate_summary(discussion: str) -> str:
     prompt = (
         "以下は4人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえ、質問に対するまとめ回答を生成してください。\n"
+        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
@@ -327,19 +327,6 @@ with st.container():
 # ------------------------
 st.header("会話履歴")
 if st.session_state.messages:
-    for msg in reversed(st.session_state.messages):
-        display_name = user_name if msg["role"] == "user" else msg["role"]
-        if msg["role"] == "user":
-            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-                st.markdown(
-                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
-                    unsafe_allow_html=True,
-                )
-        else:
-            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
-                st.markdown(
-                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
-                    unsafe_allow_html=True,
-                )
+    display_chat_log(st.session_state.messages)
 else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
