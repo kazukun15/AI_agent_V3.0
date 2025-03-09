@@ -15,11 +15,15 @@ from transformers import AutoFeatureExtractor, ViTForImageClassification
 
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
+# ▼ インターネット検索用（webツールを利用）
+import web
+# ▲
+
 # ------------------------------------------------------------------
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0 + 画像解析（ViTモデル）")
+st.title("ぼくのともだち V3.0 + 画像解析＆検索")
 
 # ------------------------------------------------------------------
 # config.toml の読み込み（テーマ設定）
@@ -137,7 +141,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
-# セッション初期化：チャット履歴と画像解析キャッシュ
+# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -244,6 +248,20 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
+# インターネット検索結果取得（ユーザーの質問に基づく）
+# ------------------------------------------------------------------
+def get_search_info(query: str) -> str:
+    # Web検索を行い、結果を要約して返す。
+    # ここではシンプルに web.search を呼び出し、結果の最初の要素から概要を抽出する例です。
+    search_results = web.search(query=query)
+    # 実際の実装では、複数の結果を解析・統合して要約する処理を入れると良いです。
+    # ここでは仮に結果のテキストをそのまま返す例です。
+    # ※ユーザーには「最新情報」として自然に組み込まれます。
+    if search_results and "text" in search_results[0]:
+        return search_results[0]["text"]
+    return ""
+
+# ------------------------------------------------------------------
 # 会話生成関連の関数
 # ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
@@ -299,9 +317,12 @@ def generate_new_character() -> tuple:
     ]
     return random.choice(candidates)
 
-def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str:
+def generate_discussion(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
+    if search_info:
+        # 検索結果を自然に会話に組み込む
+        prompt += f"最新の情報によると、{search_info}という報告があります。\n"
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
@@ -318,10 +339,14 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
     )
     return call_gemini_api(prompt)
 
-def continue_discussion(additional_input: str, current_discussion: str) -> str:
+def continue_discussion(additional_input: str, current_discussion: str, search_info: str = "") -> str:
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
-        "ユーザーの追加発言: " + additional_input + "\n\n" +
+        "ユーザーの追加発言: " + additional_input + "\n\n"
+    )
+    if search_info:
+        prompt += f"最新の情報によると、{search_info}という報告もあります。\n"
+    prompt += (
         "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
@@ -334,8 +359,8 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     """
-    画像アップロード後、その解析結果に関連する話題を始めるプロンプトを生成する。
-    解析結果そのものの詳細な分析は行わず、画像から連想されるエピソードや話題を友達同士が始めるように促す。
+    画像アップロード後、その画像に関連しそうな話題を友達が始めるプロンプトを生成する。
+    解析結果の詳細ではなく、画像から連想されるエピソードや印象などを自然に話し合ってください。
     """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
@@ -343,7 +368,7 @@ def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"画像の推定結果: {analysis_text}\n\n"
         "この画像に関連しそうな話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
-        "画像そのものの分析ではなく、例えばその画像を見たときの印象や、そこから連想されるエピソードを話してください。\n"
+        "画像の内容そのものを詳細に分析するのではなく、その画像を見たときの印象や、連想されるエピソードを自然に話してください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -360,6 +385,17 @@ def generate_summary(discussion: str) -> str:
         "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
+
+# ------------------------------------------------------------------
+# インターネット検索実行（回答前に検索し、その結果を自然に組み込む）
+# ------------------------------------------------------------------
+def get_search_info(query: str) -> str:
+    # web.search を用いてインターネット検索を実行
+    results = web.search(query=query)
+    # ここでは結果の最初の1件からテキストを抽出する例です
+    if results and "text" in results[0]:
+        return results[0]["text"]
+    return ""
 
 # ------------------------------------------------------------------
 # 1) 既存のチャットメッセージを表示
@@ -387,7 +423,6 @@ for msg in st.session_state.messages:
 if uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
-    # 新しい画像の場合のみ処理する
     if st.session_state.last_uploaded_hash != image_hash:
         st.session_state.last_uploaded_hash = image_hash
         if image_hash in st.session_state.analyzed_images:
@@ -406,7 +441,7 @@ if uploaded_image is not None:
                 unsafe_allow_html=True,
             )
 
-        # (B) 解析結果をもとに、画像に関連する話題を友達が始める
+        # (B) 画像に関連する話題を友達が始める
         persona_params = adjust_parameters("image analysis", ai_age)
         discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
         for line in discussion_about_image.split("\n"):
@@ -429,13 +464,14 @@ if uploaded_image is not None:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-# 既に画像がアップロードされている場合は、ここでは何も表示しない
-
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
+    # まずインターネット検索を実行（検索結果は内部的に組み込む）
+    search_info = get_search_info(user_input)
+    
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
             quiz_result = "正解です！おめでとうございます！"
@@ -455,16 +491,17 @@ if user_input:
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
+        # ユーザー発話時、最新情報（検索結果）を取得してプロンプトに組み込む
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
-            discussion = generate_discussion(user_input, persona_params, ai_age)
+            discussion = generate_discussion(user_input, persona_params, ai_age, search_info=search_info)
         else:
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
-            discussion = continue_discussion(user_input, history)
+            discussion = continue_discussion(user_input, history, search_info=search_info)
         for line in discussion.split("\n"):
             line = line.strip()
             if line:
