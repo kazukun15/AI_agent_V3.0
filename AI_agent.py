@@ -123,7 +123,7 @@ st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
-# インターネット検索利用のON/OFFを切り替えるスライドボタン
+# インターネット検索利用のON/OFFを切り替えるチェックボックス
 # ------------------------------------------------------------------
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
 
@@ -346,8 +346,10 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int, search
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
     new_name, new_personality = generate_new_character()
     prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
+    # ユーザーの発言はそのまま記録されるが、各キャラクターは引用せず自身の意見だけを話す
     prompt += (
-        "\n上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
+        "\n※ユーザーの発言は記録されますが、他のキャラクターはユーザーの発言を引用せず、自分の意見だけで回答してください。\n"
+        "上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -365,6 +367,7 @@ def continue_discussion(additional_input: str, current_discussion: str, search_i
     if search_info:
         prompt += f"最新の情報によると、{search_info}という報告もあります。\n"
     prompt += (
+        "\n※ユーザーの発言は記録されますが、他のキャラクターはユーザーの発言を引用せず、自分の意見だけで回答してください。\n"
         "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
         "出力形式は以下の通りです。\n"
         "ゆかり: 発言内容\n"
@@ -498,7 +501,7 @@ if uploaded_image is not None:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延
+                time.sleep(random.uniform(1, 3))  # ランダムな遅延
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
