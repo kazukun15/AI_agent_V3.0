@@ -1,4 +1,6 @@
+import os
 import streamlit as st
+import requests
 import re
 import random
 import json
@@ -16,6 +18,7 @@ try:
 except Exception as e:
     st.error(f".streamlit/config.toml の読み込みに失敗しました: {e}")
     config = {}
+
 API_KEY = config.get("general", {}).get("api_key", st.secrets["general"]["api_key"])
 MODEL_NAME = config.get("general", {}).get("model_name", "gemini-2.0-flash-001")
 
@@ -92,14 +95,15 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------
-# アイコン画像の読み込み（画像は AI_agent_ver3.0/avatars/ に配置）
+# アイコン画像の読み込み（画像は AI_agent_Ver3.0/avatars/ ではなく、正確には "AI_agent_Ver2.0/avatars/" に配置）
 # ------------------------
+base_avatar_path = os.path.join("AI_agent_Ver2.0", "avatars")
 try:
-    img_user = Image.open("AI_agent_Ver3.0/avatars/user.png")
-    img_yukari = Image.open("AI_agent_Ver3.0/avatars/yukari.png")
-    img_shinya = Image.open("AI_agent_Ver3.0/avatars/shinya.png")
-    img_minoru = Image.open("AI_agent_Ver3.0/avatars/minoru.png")
-    img_newchar = Image.open("AI_agent_Ver3.0/avatars/new_character.png")
+    img_user = Image.open(os.path.join(base_avatar_path, "user.png"))
+    img_yukari = Image.open(os.path.join(base_avatar_path, "yukari.png"))
+    img_shinya = Image.open(os.path.join(base_avatar_path, "shinya.png"))
+    img_minoru = Image.open(os.path.join(base_avatar_path, "minoru.png"))
+    img_newchar = Image.open(os.path.join(base_avatar_path, "new_character.png"))
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
     img_user = "👤"
@@ -118,7 +122,7 @@ avatar_img_dict = {
 }
 
 # ------------------------
-# Gemini API 呼び出し関数（非同期処理）
+# Gemini API 非同期呼び出し関数
 # ------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
