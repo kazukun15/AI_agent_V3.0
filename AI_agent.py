@@ -7,6 +7,8 @@ import json
 import hashlib  # 画像ハッシュ用
 from io import BytesIO
 from PIL import Image
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # ▼ 画像解析用に追加（ViTモデル）
 import torch
@@ -120,6 +122,11 @@ st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
+# インターネット検索利用のON/OFFを切り替えるスライドボタン（チェックボックス）
+# ------------------------------------------------------------------
+use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
+
+# ------------------------------------------------------------------
 # キャラクター定義
 # ------------------------------------------------------------------
 USER_NAME = "user"
@@ -145,6 +152,8 @@ if "analyzed_images" not in st.session_state:
     st.session_state.analyzed_images = {}
 if "last_uploaded_hash" not in st.session_state:
     st.session_state.last_uploaded_hash = None
+if "search_cache" not in st.session_state:
+    st.session_state.search_cache = {}
 
 # ------------------------------------------------------------------
 # アバター画像の読み込み
@@ -244,9 +253,10 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
-# インターネット検索結果取得（DuckDuckGo API利用）
+# インターネット検索結果取得（DuckDuckGo API利用＋キャッシュ＆非同期処理）
 # ------------------------------------------------------------------
-def get_search_info(query: str) -> str:
+@st.cache_data(show_spinner=False)
+def cached_get_search_info(query: str) -> str:
     url = "https://api.duckduckgo.com/"
     params = {
         "q": query,
@@ -257,11 +267,17 @@ def get_search_info(query: str) -> str:
     try:
         response = requests.get(url, params=params)
         data = response.json()
-        # AbstractText に簡単な要約が入っていることが多い
         result = data.get("AbstractText", "")
         return result
     except Exception as e:
         return ""
+
+executor = ThreadPoolExecutor(max_workers=1)
+
+def async_get_search_info(query: str) -> str:
+    # 非同期処理をスレッドで実行し、結果を待つ（見た目は同期）
+    future = executor.submit(cached_get_search_info, query)
+    return future.result()
 
 # ------------------------------------------------------------------
 # 会話生成関連の関数
@@ -361,7 +377,7 @@ def continue_discussion(additional_input: str, current_discussion: str, search_i
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     """
     画像アップロード後、その画像に関連しそうな話題を友達が始めるプロンプトを生成する。
-    解析結果の詳細な分析は行わず、画像から連想されるエピソードや印象を話すように促す。
+    解析結果の詳細な分析は行わず、画像から連想されるエピソードや印象を自由に話すよう促す。
     """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
@@ -369,7 +385,7 @@ def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"画像の推定結果: {analysis_text}\n\n"
         "この画像に関連しそうな話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
-        "画像の内容そのものの詳細な分析ではなく、画像を見たときの印象や連想されるエピソードを自由に話してください。\n"
+        "画像そのものの詳細な分析ではなく、画像を見たときの印象や連想されるエピソードを自由に話してください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -388,9 +404,10 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# インターネット検索実行（DuckDuckGo API利用）
+# インターネット検索実行（DuckDuckGo API利用＋キャッシュ＆非同期処理）
 # ------------------------------------------------------------------
-def get_search_info(query: str) -> str:
+@st.cache_data(show_spinner=False)
+def cached_get_search_info(query: str) -> str:
     url = "https://api.duckduckgo.com/"
     params = {
         "q": query,
@@ -405,6 +422,12 @@ def get_search_info(query: str) -> str:
         return result
     except Exception as e:
         return ""
+
+executor = ThreadPoolExecutor(max_workers=1)
+
+def async_get_search_info(query: str) -> str:
+    future = executor.submit(cached_get_search_info, query)
+    return future.result()
 
 # ------------------------------------------------------------------
 # 1) 既存のチャットメッセージを表示
@@ -478,8 +501,8 @@ if uploaded_image is not None:
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # インターネット検索を実行して最新情報を取得
-    search_info = get_search_info(user_input)
+    # インターネット検索を利用する場合は、キャッシュ＆非同期処理で結果を取得
+    search_info = async_get_search_info(user_input) if use_internet else ""
     
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
