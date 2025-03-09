@@ -139,7 +139,7 @@ if "messages" not in st.session_state:
 # アイコン画像の読み込み（AI_agent_V3.0/avatars/ に配置）
 # ------------------------------------------------------------------
 import os
-base_avatar_path = os.path.join("AI_agent_V3.0", "avatars")
+base_avatar_path = os.path.join("AI_agent_V3.0/avatars")
 try:
     img_user = Image.open(os.path.join(base_avatar_path, "user.png"))
     img_yukari = Image.open(os.path.join(base_avatar_path, "yukari.png"))
