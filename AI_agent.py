@@ -36,7 +36,7 @@ try:
     secondaryBackgroundColor = theme_config.get("secondaryBackgroundColor", "#fff8ef")
     textColor = theme_config.get("textColor", "#5e796a")
     font = theme_config.get("font", "monospace")
-except Exception as e:
+except Exception:
     # 万が一読み込みに失敗したらデフォルト値を使用
     primaryColor = "#729075"
     backgroundColor = "#f1ece3"
@@ -119,7 +119,7 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 # ------------------------------------------------------------------
-# 画像アップロード欄
+# サイドバーに画像アップロード欄
 # ------------------------------------------------------------------
 st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
@@ -134,12 +134,12 @@ SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]  # 既存メンバー（新キャラは都度生成）
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]  # 既存メンバー
 
 # ------------------------------------------------------------------
 # 定数／設定（APIキー、モデル）
 # ------------------------------------------------------------------
-API_KEY = st.secrets["general"]["api_key"]
+API_KEY = st.secrets["general"]["api_key"]  # ご自身のGemini APIキーをSecretsで管理
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
@@ -149,7 +149,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# 画像読み込み（avatarsディレクトリ）
+# アバター画像の読み込み
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 avatar_dir = os.path.join(BASE_DIR, "avatars")
@@ -220,7 +220,7 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 # ------------------------------------------------------------------
-# 画像解析モデルのロード (ResNetベース)
+# 画像解析モデル（ResNet）ロード
 # ------------------------------------------------------------------
 @st.cache_resource
 def load_image_classification_model():
@@ -233,7 +233,7 @@ def load_image_classification_model():
 extractor, resnet_model = load_image_classification_model()
 
 def analyze_image_with_resnet(pil_image: Image.Image) -> str:
-    """ResNetで画像分類を行い、上位3クラスと確信度を文字列化"""
+    """ResNetで画像分類を行い、上位3クラスを文字列化"""
     inputs = extractor(pil_image, return_tensors="pt")
     with torch.no_grad():
         outputs = resnet_model(**inputs)
@@ -242,10 +242,10 @@ def analyze_image_with_resnet(pil_image: Image.Image) -> str:
     top_indices = topk.indices[0].tolist()
     top_scores = topk.values[0].tolist()
     labels = resnet_model.config.id2label
+    # ソフトマックスで確率を計算
+    probs = torch.nn.functional.softmax(logits, dim=1)[0]
 
     result_str = []
-    # 確率計算
-    probs = torch.nn.functional.softmax(logits, dim=1)[0]
     for idx, score in zip(top_indices, top_scores):
         label_name = labels[idx]
         confidence = probs[idx].item()
@@ -309,7 +309,6 @@ def generate_new_character() -> tuple:
     return random.choice(candidates)
 
 def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str:
-    """ユーザーからの質問に対する会話を最初に生成"""
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
@@ -329,7 +328,6 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
     return call_gemini_api(prompt)
 
 def continue_discussion(additional_input: str, current_discussion: str) -> str:
-    """ユーザーの追加発言がある場合に会話を継続"""
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
@@ -343,11 +341,10 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-# ▼ 追加: 画像解析結果をプロンプトに組み込んで4人が話す会話を生成
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     """
-    画像解析結果を受けて、4人＋新キャラがそれについて会話する。
-    実際には「この画像は〇〇が写っているようだけど、どう思う？」という形で話し合う。
+    解析結果(analysis_text)を基に、ゆかり・しんや・みのる・新キャラクターが
+    その画像について自然に会話を始めるプロンプトを生成する。
     """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
@@ -357,11 +354,10 @@ def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int
         f"解析結果: {analysis_text}\n\n"
         f"このAIは{ai_age}歳として振る舞います。\n"
     )
-    # キャラクターの口調設定
     for name, params in persona_params.items():
         prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    prompt += f"新キャラクターとして {new_name} は【{new_personality}】な性格も加わります。\n"
     prompt += (
+        f"新キャラクターとして {new_name} は【{new_personality}】な性格も加わります。\n"
         "\n4人は友達同士のように、この画像解析結果について気楽に話し合ってください。\n"
         "例えば、『犬っぽいけど毛の色が違うね』など自然な雑談をしてください。\n"
         "出力形式は以下の通りです。\n"
@@ -382,7 +378,7 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# 1) まずは、すでに存在するメッセージをチャット形式で表示
+# 1) すでに存在するチャットメッセージを表示
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
@@ -402,16 +398,16 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば解析し、さらに会話（画像についてのトーク）を生成
+# 2) 画像アップロードがあれば解析し、すぐに4人で会話
 # ------------------------------------------------------------------
 if uploaded_image is not None:
     try:
         pil_img = Image.open(uploaded_image)
-        # 解析して上位3ラベルを文字列化
-        label_text = analyze_image_with_resnet(pil_img)  # 例: "Maltese_dog (92.1%), Chihuahua (2.3%), ..."
-        analysis_text = f"アップロードされた画像は: {label_text}"
+        # 解析 (ResNet)
+        label_text = analyze_image_with_resnet(pil_img)  # "Maltese_dog (88.2%), Chihuahua (2.1%), ..."
+        analysis_text = f"アップロードされた画像の推定結果: {label_text}"
         
-        # 表示: 解析結果をチャットログに追加
+        # (A) 解析結果をチャットログへ追加 & 表示
         st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
         with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
             st.markdown(
@@ -419,11 +415,11 @@ if uploaded_image is not None:
                 unsafe_allow_html=True,
             )
         
-        # 画像について友達4人が会話するプロンプト
+        # (B) その解析結果を元に、友達4人（+新キャラ）が会話を始める
         persona_params = adjust_parameters("image analysis", ai_age)
         discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
         
-        # 会話を行ごとに区切り、チャットログに追加
+        # 会話を行ごとに区切ってチャットへ追加
         for line in discussion_about_image.split("\n"):
             line = line.strip()
             if line:
@@ -450,11 +446,11 @@ if uploaded_image is not None:
         st.error(f"画像解析中にエラーが発生しました: {e}")
 
 # ------------------------------------------------------------------
-# 3) ユーザーの新規入力（テキスト）を st.chat_input で受け取り
+# 3) テキスト入力（st.chat_input）で通常の会話
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # クイズが有効の場合、回答をチェック
+    # クイズがアクティブなら回答チェック
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
             quiz_result = "正解です！おめでとうございます！"
@@ -467,9 +463,9 @@ if user_input:
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
                 unsafe_allow_html=True,
             )
-        st.session_state.quiz_active = False  # クイズ終了
+        st.session_state.quiz_active = False
     else:
-        # (1) ユーザー発話をチャットログに追加 & 表示
+        # 普通の会話
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
@@ -477,13 +473,12 @@ if user_input:
                 unsafe_allow_html=True,
             )
         
-        # (2) Geminiに投げるプロンプトを作成 -> 応答を受け取る
-        # 最初の発言なら generate_discussion、2回目以降は continue_discussion
+        # 最初の発言かどうかで処理切り替え
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion(user_input, persona_params, ai_age)
         else:
-            # 既存キャラのセリフだけ時系列で繋げる
+            # これまでの会話ログから、キャラクターの発言だけ抜粋して連結
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
@@ -491,7 +486,7 @@ if user_input:
             )
             discussion = continue_discussion(user_input, history)
         
-        # (3) Geminiからの出力を行ごとに分割して、それぞれをチャットログに追加・表示
+        # AI応答を行ごとに分割してチャットログ・画面に反映
         for line in discussion.split("\n"):
             line = line.strip()
             if line:
