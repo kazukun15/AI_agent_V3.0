@@ -4,13 +4,14 @@ import requests
 import re
 import random
 import json
-from PIL import Image
+import hashlib  # 画像のハッシュ計算用
 from io import BytesIO
+from PIL import Image
 
-# ▼ 画像解析用に追加
+# ▼ 画像解析用に追加（ViTモデル）
 import torch
-from transformers import AutoFeatureExtractor, ResNetForImageClassification
-# ▲ 画像解析用に追加
+from transformers import AutoFeatureExtractor, ViTForImageClassification
+# ▲
 
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
@@ -18,10 +19,10 @@ from streamlit_chat import message  # streamlit-chat のメッセージ表示用
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0 + 画像解析")
+st.title("ぼくのともだち V3.0 + 画像解析（ViTモデル）")
 
 # ------------------------------------------------------------------
-# 同じディレクトリにある config.toml を読み込み（テーマ設定）
+# config.toml の読み込み（テーマ設定）
 # ------------------------------------------------------------------
 try:
     try:
@@ -37,7 +38,6 @@ try:
     textColor = theme_config.get("textColor", "#5e796a")
     font = theme_config.get("font", "monospace")
 except Exception:
-    # 万が一読み込みに失敗したらデフォルト値を使用
     primaryColor = "#729075"
     backgroundColor = "#f1ece3"
     secondaryBackgroundColor = "#fff8ef"
@@ -45,7 +45,7 @@ except Exception:
     font = "monospace"
 
 # ------------------------------------------------------------------
-# 背景・共通スタイルの設定（テーマ設定を反映）
+# 背景・共通スタイルの設定
 # ------------------------------------------------------------------
 st.markdown(
     f"""
@@ -64,7 +64,6 @@ st.markdown(
         margin-bottom: 20px;
         background-color: {secondaryBackgroundColor};
     }}
-    /* バブルチャット用のスタイル */
     .chat-bubble {{
         background-color: #d4f7dc;
         border-radius: 10px;
@@ -86,13 +85,9 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザーの名前入力（上部）
+# ユーザーの名前・AIの年齢入力
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-
-# ------------------------------------------------------------------
-# AIの年齢入力（上部）
-# ------------------------------------------------------------------
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -125,7 +120,7 @@ st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
-# キャラクター定義（固定メンバー）
+# キャラクター定義
 # ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
@@ -133,27 +128,27 @@ YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
-
-NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]  # 既存メンバー
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ------------------------------------------------------------------
-# 定数／設定（APIキー、モデル）
+# APIキー、モデル設定
 # ------------------------------------------------------------------
-API_KEY = st.secrets["general"]["api_key"]  # ご自身のGemini APIキーをSecretsで管理
+API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
-# セッション初期化（チャット履歴：messages）
+# セッション初期化：チャット履歴と画像解析キャッシュ
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "analyzed_images" not in st.session_state:
+    st.session_state.analyzed_images = {}
 
 # ------------------------------------------------------------------
 # アバター画像の読み込み
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 avatar_dir = os.path.join(BASE_DIR, "avatars")
-
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
     img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
@@ -162,12 +157,7 @@ try:
     img_newchar = Image.open(os.path.join(avatar_dir, "new_character.png"))
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
-    # 読み込めない場合は絵文字代用
-    img_user = "👤"
-    img_yukari = "🌸"
-    img_shinya = "🌊"
-    img_minoru = "🍀"
-    img_newchar = "⭐"
+    img_user, img_yukari, img_shinya, img_minoru, img_newchar = "👤", "🌸", "🌊", "🍀", "⭐"
 
 avatar_img_dict = {
     USER_NAME: img_user,
@@ -220,33 +210,30 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 # ------------------------------------------------------------------
-# 画像解析モデル（ResNet）ロード
+# ViTモデルを用いた画像解析モデルのロード（キャッシュ）
 # ------------------------------------------------------------------
 @st.cache_resource
 def load_image_classification_model():
-    model_name = "microsoft/resnet-50"
+    model_name = "google/vit-base-patch16-224"
     extractor = AutoFeatureExtractor.from_pretrained(model_name)
-    model = ResNetForImageClassification.from_pretrained(model_name)
+    model = ViTForImageClassification.from_pretrained(model_name)
     model.eval()
     return extractor, model
 
-extractor, resnet_model = load_image_classification_model()
+extractor, vit_model = load_image_classification_model()
 
-def analyze_image_with_resnet(pil_image: Image.Image) -> str:
-    """ResNetで画像分類を行い、上位3クラスを文字列化"""
+def analyze_image_with_vit(pil_image: Image.Image) -> str:
+    """ViTで画像分類を行い、上位3クラスを文字列化"""
     inputs = extractor(pil_image, return_tensors="pt")
     with torch.no_grad():
-        outputs = resnet_model(**inputs)
+        outputs = vit_model(**inputs)
     logits = outputs.logits
     topk = logits.topk(3)
     top_indices = topk.indices[0].tolist()
-    top_scores = topk.values[0].tolist()
-    labels = resnet_model.config.id2label
-    # ソフトマックスで確率を計算
     probs = torch.nn.functional.softmax(logits, dim=1)[0]
-
+    labels = vit_model.config.id2label
     result_str = []
-    for idx, score in zip(top_indices, top_scores):
+    for idx in top_indices:
         label_name = labels[idx]
         confidence = probs[idx].item()
         result_str.append(f"{label_name} ({confidence*100:.1f}%)")
@@ -342,13 +329,8 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     return call_gemini_api(prompt)
 
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
-    """
-    解析結果(analysis_text)を基に、ゆかり・しんや・みのる・新キャラクターが
-    その画像について自然に会話を始めるプロンプトを生成する。
-    """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
-    
     prompt = (
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"解析結果: {analysis_text}\n\n"
@@ -378,7 +360,7 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# 1) すでに存在するチャットメッセージを表示
+# 1) 既存のチャットメッセージを表示
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
@@ -398,66 +380,62 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば解析し、すぐに4人で会話
+# 2) 画像アップロードがあれば、キャッシュを利用して解析し、すぐに会話開始
 # ------------------------------------------------------------------
 if uploaded_image is not None:
-    try:
-        pil_img = Image.open(uploaded_image)
-        # 解析 (ResNet)
-        label_text = analyze_image_with_resnet(pil_img)  # "Maltese_dog (88.2%), Chihuahua (2.1%), ..."
+    image_bytes = uploaded_image.getvalue()
+    image_hash = hashlib.md5(image_bytes).hexdigest()
+    if image_hash in st.session_state.analyzed_images:
+        analysis_text = st.session_state.analyzed_images[image_hash]
+    else:
+        pil_img = Image.open(BytesIO(image_bytes))
+        label_text = analyze_image_with_vit(pil_img)  # ViTでの解析
         analysis_text = f"アップロードされた画像の推定結果: {label_text}"
-        
-        # (A) 解析結果をチャットログへ追加 & 表示
-        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
-        with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
-                unsafe_allow_html=True,
-            )
-        
-        # (B) その解析結果を元に、友達4人（+新キャラ）が会話を始める
-        persona_params = adjust_parameters("image analysis", ai_age)
-        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
-        
-        # 会話を行ごとに区切ってチャットへ追加
-        for line in discussion_about_image.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                role = parts[0]
-                content = parts[1].strip() if len(parts) > 1 else ""
-                
-                st.session_state.messages.append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
-                if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                        st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                        st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-        
-    except Exception as e:
-        st.error(f"画像解析中にエラーが発生しました: {e}")
+        st.session_state.analyzed_images[image_hash] = analysis_text
+
+    # (A) 解析結果をチャットログへ追加 & 表示
+    st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+    with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
+        st.markdown(
+            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    # (B) 解析結果をもとに4人＋新キャラが会話するプロンプトを生成
+    persona_params = adjust_parameters("image analysis", ai_age)
+    discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+    for line in discussion_about_image.split("\n"):
+        line = line.strip()
+        if line:
+            parts = line.split(":", 1)
+            role = parts[0]
+            content = parts[1].strip() if len(parts) > 1 else ""
+            st.session_state.messages.append({"role": role, "content": content})
+            display_name = user_name if role == "user" else role
+            if role == "user":
+                with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                    st.markdown(
+                        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                    st.markdown(
+                        f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                        unsafe_allow_html=True,
+                    )
 
 # ------------------------------------------------------------------
-# 3) テキスト入力（st.chat_input）で通常の会話
+# 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # クイズがアクティブなら回答チェック
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
             quiz_result = "正解です！おめでとうございます！"
         else:
             quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
         st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
-        
         with st.chat_message("クイズ", avatar=avatar_img_dict["クイズ"]):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
@@ -465,35 +443,28 @@ if user_input:
             )
         st.session_state.quiz_active = False
     else:
-        # 普通の会話
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
-        
-        # 最初の発言かどうかで処理切り替え
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion(user_input, persona_params, ai_age)
         else:
-            # これまでの会話ログから、キャラクターの発言だけ抜粋して連結
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
             discussion = continue_discussion(user_input, history)
-        
-        # AI応答を行ごとに分割してチャットログ・画面に反映
         for line in discussion.split("\n"):
             line = line.strip()
             if line:
                 parts = line.split(":", 1)
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
-                
                 st.session_state.messages.append({"role": role, "content": content})
                 display_name = user_name if role == "user" else role
                 if role == "user":
