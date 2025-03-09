@@ -5,6 +5,7 @@ import re
 import random
 import json
 import hashlib  # 画像ハッシュ用
+import time    # 遅延用
 from io import BytesIO
 from PIL import Image
 import asyncio
@@ -497,6 +498,7 @@ if uploaded_image is not None:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
+                time.sleep(random.uniform(1, 3))  # ランダムな遅延
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
@@ -554,3 +556,4 @@ if user_input:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
+                time.sleep(random.uniform(1, 3))  # ランダムな遅延
