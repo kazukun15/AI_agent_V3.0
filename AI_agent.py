@@ -143,6 +143,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "analyzed_images" not in st.session_state:
     st.session_state.analyzed_images = {}
+if "last_uploaded_hash" not in st.session_state:
+    st.session_state.last_uploaded_hash = None
 
 # ------------------------------------------------------------------
 # アバター画像の読み込み
@@ -332,16 +334,16 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
 
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     """
-    アップロードされた画像に関連しそうな話題を、友達同士で気軽に始めるプロンプトを生成する。
-    解析結果そのものの議論はせず、画像に関連する話題（例：風景なら旅行の話、動物なら飼育の話など）を始めるように指示する。
+    画像アップロード後、その解析結果に関連する話題を始めるプロンプトを生成する。
+    解析結果そのものの詳細な分析は行わず、画像から連想されるエピソードや話題を友達同士が始めるように促す。
     """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
     prompt = (
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"画像の推定結果: {analysis_text}\n\n"
-        "この画像に関連する話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
-        "画像の内容そのものを詳しく分析するのではなく、画像にまつわるエピソードや印象、関連する話題を自由に話し合ってください。\n"
+        "この画像に関連しそうな話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
+        "画像そのものの分析ではなく、例えばその画像を見たときの印象や、そこから連想されるエピソードを話してください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -380,50 +382,54 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば、キャッシュを利用して解析し、会話開始
+# 2) 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
 # ------------------------------------------------------------------
 if uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
-    if image_hash in st.session_state.analyzed_images:
-        analysis_text = st.session_state.analyzed_images[image_hash]
-    else:
-        pil_img = Image.open(BytesIO(image_bytes))
-        label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
-        analysis_text = f"{label_text}"
-        st.session_state.analyzed_images[image_hash] = analysis_text
+    # 新しい画像の場合のみ処理する
+    if st.session_state.last_uploaded_hash != image_hash:
+        st.session_state.last_uploaded_hash = image_hash
+        if image_hash in st.session_state.analyzed_images:
+            analysis_text = st.session_state.analyzed_images[image_hash]
+        else:
+            pil_img = Image.open(BytesIO(image_bytes))
+            label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
+            analysis_text = f"{label_text}"
+            st.session_state.analyzed_images[image_hash] = analysis_text
 
-    # (A) 解析結果をチャットログへ追加＆表示
-    st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
-    with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
-        st.markdown(
-            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
-            unsafe_allow_html=True,
-        )
+        # (A) 解析結果をチャットログへ追加＆表示
+        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+        with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+                unsafe_allow_html=True,
+            )
 
-    # (B) 解析結果をもとに、画像に関連する話題を友達が始める
-    persona_params = adjust_parameters("image analysis", ai_age)
-    discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
-    for line in discussion_about_image.split("\n"):
-        line = line.strip()
-        if line:
-            parts = line.split(":", 1)
-            role = parts[0]
-            content = parts[1].strip() if len(parts) > 1 else ""
-            st.session_state.messages.append({"role": role, "content": content})
-            display_name = user_name if role == "user" else role
-            if role == "user":
-                with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                    st.markdown(
-                        f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                    st.markdown(
-                        f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                        unsafe_allow_html=True,
-                    )
+        # (B) 解析結果をもとに、画像に関連する話題を友達が始める
+        persona_params = adjust_parameters("image analysis", ai_age)
+        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+        for line in discussion_about_image.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state.messages.append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+# 既に画像がアップロードされている場合は、ここでは何も表示しない
 
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
