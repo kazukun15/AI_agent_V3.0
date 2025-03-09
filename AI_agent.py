@@ -136,11 +136,13 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# アイコン画像の読み込み（AI_agent_V3.0/avatars/ に配置）
+# 【修正ポイント】アイコン画像の読み込み（avatars ディレクトリを修正）
 # ------------------------------------------------------------------
-# このスクリプトの絶対パスを基準に、avatars ディレクトリを指定（ディレクトリ名に注意）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-avatar_dir = os.path.join(BASE_DIR, "AI_agent_V3.0", "avatars")
+
+# ここを修正: "AI_agent_V3.0", "avatars" のようにフォルダを2重に指定せず、"avatars" のみにする
+avatar_dir = os.path.join(BASE_DIR, "avatars")  
+
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
     img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
@@ -309,17 +311,12 @@ def display_chat_log(chat_log: list):
     """
     from streamlit_chat import message as st_message
     for msg in reversed(chat_log):
-        # "role"/"content" または "sender"/"message" に対応
         sender = msg.get("role", msg.get("sender", "不明"))
         text = msg.get("content", msg.get("message", ""))
         if sender == "user":
             st_message(text, is_user=True)
         else:
             st_message(f"{sender}: {text}", is_user=False)
-
-# ------------------------------------------------------------------
-# 初回会話の自動生成は削除（ユーザーが発言したときのみ応答）
-# ------------------------------------------------------------------
 
 # ------------------------------------------------------------------
 # 固定フッター（入力エリア）の配置
