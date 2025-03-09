@@ -275,8 +275,9 @@ def cached_get_search_info(query: str) -> str:
 executor = ThreadPoolExecutor(max_workers=1)
 
 def async_get_search_info(query: str) -> str:
-    future = executor.submit(cached_get_search_info, query)
-    return future.result()
+    with st.spinner("最新情報を検索中…"):
+        future = executor.submit(cached_get_search_info, query)
+        return future.result()
 
 # ------------------------------------------------------------------
 # 会話生成関連の関数
@@ -425,8 +426,9 @@ def cached_get_search_info(query: str) -> str:
 executor = ThreadPoolExecutor(max_workers=1)
 
 def async_get_search_info(query: str) -> str:
-    future = executor.submit(cached_get_search_info, query)
-    return future.result()
+    with st.spinner("最新情報を検索中…"):
+        future = executor.submit(cached_get_search_info, query)
+        return future.result()
 
 # ------------------------------------------------------------------
 # 1) 既存のチャットメッセージを表示
