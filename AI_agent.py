@@ -1,5 +1,4 @@
 import os
-import sys
 import streamlit as st
 import requests
 import re
@@ -9,13 +8,7 @@ from PIL import Image
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
 # ------------------------------------------------------------------
-# st.set_page_config() は最初に呼び出す
-# ------------------------------------------------------------------
-st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0")
-
-# ------------------------------------------------------------------
-# 同じディレクトリにある config.toml を読み込み（テーマ設定）
+# config.toml の読み込み（同一ディレクトリにある場合）
 # ------------------------------------------------------------------
 try:
     try:
@@ -36,6 +29,12 @@ except Exception as e:
     secondaryBackgroundColor = "#fff8ef"
     textColor = "#5e796a"
     font = "monospace"
+
+# ------------------------------------------------------------------
+# ページ設定
+# ------------------------------------------------------------------
+st.set_page_config(page_title="ぼくのともだち", layout="wide")
+st.title("ぼくのともだち V3.0")
 
 # ------------------------------------------------------------------
 # 背景・共通スタイルの設定（テーマ設定を反映）
@@ -131,7 +130,7 @@ MODEL_NAME = "gemini-2.0-flash-001"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ------------------------------------------------------------------
-# セッション初期化（チャット履歴）
+# セッション初期化（チャット履歴：messages）
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -139,10 +138,9 @@ if "messages" not in st.session_state:
 # ------------------------------------------------------------------
 # アイコン画像の読み込み（AI_agent_V3.0/avatars/ に配置）
 # ------------------------------------------------------------------
-# このスクリプトファイルの絶対パスから相対的に avatars ディレクトリを指定
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # このファイルのあるディレクトリ
+# このスクリプトの絶対パスを基準に、avatars ディレクトリを指定
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 avatar_dir = os.path.join(BASE_DIR, "AI_agent_V3.0", "avatars")
-
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
     img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
@@ -172,7 +170,6 @@ avatar_img_dict = {
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
-    # バックスラッシュがエスケープされないよう raw 文字列で書いてもOK
     pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
@@ -222,7 +219,6 @@ def analyze_question(question: str) -> int:
     return score
 
 def adjust_parameters(question: str, ai_age: int) -> dict:
-    """AIの年齢(ai_age)に応じてキャラクター性を変える"""
     score = analyze_question(question)
     params = {}
     if ai_age < 30:
@@ -305,83 +301,105 @@ def generate_summary(discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
-# ------------------------------------------------------------------
-# チャット履歴の表示（Databricks Q&A bot 形式 + st.chat_input）
-# ------------------------------------------------------------------
-for msg in st.session_state.messages:
-    role = msg["role"]
-    content = msg["content"]
-    display_name = user_name if role == "user" else role
-    if role == "user":
-        with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-            st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                unsafe_allow_html=True,
-            )
-    else:
-        with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                unsafe_allow_html=True,
-            )
+def display_chat_log(chat_log: list):
+    """
+    chat_log の各メッセージを、LINE風のチャットバブル形式で表示する。
+    ユーザーの発言は右寄せ、友達の発言は左寄せで表示され、テキストは自動で折り返されます。
+    最新のメッセージが入力バーの直上に表示されるよう、チャットログは逆順に表示します。
+    """
+    from streamlit_chat import message as st_message
+    for msg in reversed(chat_log):
+        # "role"/"content" または "sender"/"message" に対応
+        sender = msg.get("role", msg.get("sender", "不明"))
+        text = msg.get("content", msg.get("message", ""))
+        if sender == "user":
+            st_message(text, is_user=True)
+        else:
+            st_message(f"{sender}: {text}", is_user=False)
 
 # ------------------------------------------------------------------
-# ユーザー入力の取得（st.chat_input）
+# 初回会話の自動生成は削除（ユーザーが発言したときのみ応答）
 # ------------------------------------------------------------------
-user_input = st.chat_input("何か質問や話したいことがありますか？")
-if user_input:
-    # クイズがアクティブなら、ユーザーの入力をクイズの回答として処理
-    if st.session_state.get("quiz_active", False):
-        if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
-            quiz_result = "正解です！おめでとうございます！"
+
+# ------------------------------------------------------------------
+# 固定フッター（入力エリア）の配置
+# ------------------------------------------------------------------
+with st.container():
+    st.markdown(
+        '<div style="position: fixed; bottom: 0; width: 100%; background: #FFF; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">',
+        unsafe_allow_html=True,
+    )
+    with st.form("chat_form", clear_on_submit=True):
+        user_input = st.text_area("新たな発言を入力してください", placeholder="ここに入力", height=100, key="user_input")
+        col1, col2 = st.columns(2)
+        with col1:
+            send_button = st.form_submit_button("送信")
+        with col2:
+            continue_button = st.form_submit_button("続きを話す")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # 送信ボタンの処理
+    if send_button:
+        if user_input.strip():
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            if len(st.session_state.messages) == 1:
+                persona_params = adjust_parameters(user_input, ai_age)
+                discussion = generate_discussion(user_input, persona_params, ai_age)
+            else:
+                history = "\n".join(
+                    f'{msg["role"]}: {msg["content"]}'
+                    for msg in st.session_state.messages
+                    if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
+                )
+                discussion = continue_discussion(user_input, history)
+            for line in discussion.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    role = parts[0]
+                    content = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state.messages.append({"role": role, "content": content})
         else:
-            quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
-        st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
-        with st.chat_message("クイズ", avatar="❓"):
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
-                unsafe_allow_html=True,
-            )
-        st.session_state.quiz_active = False
-    else:
-        # ユーザー発言を右寄せで表示＆履歴に追加
-        with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-            st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
-                unsafe_allow_html=True,
-            )
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        # AI応答を生成
-        if len(st.session_state.messages) == 1:
-            persona_params = adjust_parameters(user_input, ai_age)
-            discussion = generate_discussion(user_input, persona_params, ai_age)
-        else:
+            st.warning("発言を入力してください。")
+    
+    # 続きを話すボタンの処理
+    if continue_button:
+        if st.session_state.messages:
+            default_input = "続きをお願いします。"
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
-            discussion = continue_discussion(user_input, history)
-        
-        # 生成された応答を改行区切りで解析して追加
-        for line in discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                role = parts[0]
-                content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state.messages.append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
-                if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                        st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                        st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
+            new_discussion = continue_discussion(default_input, history)
+            for line in new_discussion.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    role = parts[0]
+                    content = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state.messages.append({"role": role, "content": content})
+        else:
+            st.warning("まずは会話を開始してください。")
+
+# ------------------------------------------------------------------
+# チャット履歴の表示
+# ------------------------------------------------------------------
+st.header("会話履歴")
+if st.session_state.messages:
+    for msg in reversed(st.session_state.messages):
+        display_name = user_name if msg["role"] == "user" else msg["role"]
+        if msg["role"] == "user":
+            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+                st.markdown(
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
