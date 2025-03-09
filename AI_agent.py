@@ -1,4 +1,5 @@
 import os
+import sys
 import streamlit as st
 import requests
 import re
@@ -138,14 +139,16 @@ if "messages" not in st.session_state:
 # ------------------------------------------------------------------
 # アイコン画像の読み込み（AI_agent_V3.0/avatars/ に配置）
 # ------------------------------------------------------------------
-import os
-base_avatar_path = os.path.join("AI_agent_V3.0/avatars")
+# このスクリプトファイルの絶対パスから相対的に avatars ディレクトリを指定
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # このファイルのあるディレクトリ
+avatar_dir = os.path.join(BASE_DIR, "AI_agent_V3.0", "avatars")
+
 try:
-    img_user = Image.open(os.path.join(base_avatar_path, "user.png"))
-    img_yukari = Image.open(os.path.join(base_avatar_path, "yukari.png"))
-    img_shinya = Image.open(os.path.join(base_avatar_path, "shinya.png"))
-    img_minoru = Image.open(os.path.join(base_avatar_path, "minoru.png"))
-    img_newchar = Image.open(os.path.join(base_avatar_path, "new_character.png"))
+    img_user = Image.open(os.path.join(avatar_dir, "user.png"))
+    img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
+    img_shinya = Image.open(os.path.join(avatar_dir, "shinya.png"))
+    img_minoru = Image.open(os.path.join(avatar_dir, "minoru.png"))
+    img_newchar = Image.open(os.path.join(avatar_dir, "new_character.png"))
 except Exception as e:
     st.error(f"画像読み込みエラー: {e}")
     img_user = "👤"
@@ -169,7 +172,8 @@ avatar_img_dict = {
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
-    pattern = r"'parts': \\[\\{'text':.*?\\}\\], 'role': 'model'"
+    # バックスラッシュがエスケープされないよう raw 文字列で書いてもOK
+    pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
