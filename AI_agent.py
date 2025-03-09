@@ -122,7 +122,7 @@ st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
-# インターネット検索利用のON/OFFを切り替えるスライドボタン（チェックボックス）
+# インターネット検索利用のON/OFFを切り替えるスライドボタン
 # ------------------------------------------------------------------
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
 
@@ -144,7 +144,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
-# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ
+# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -275,7 +275,6 @@ def cached_get_search_info(query: str) -> str:
 executor = ThreadPoolExecutor(max_workers=1)
 
 def async_get_search_info(query: str) -> str:
-    # 非同期処理をスレッドで実行し、結果を待つ（見た目は同期）
     future = executor.submit(cached_get_search_info, query)
     return future.result()
 
