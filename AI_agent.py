@@ -4,7 +4,7 @@ import requests
 import re
 import random
 import json
-import hashlib  # 画像のハッシュ計算用
+import hashlib  # 画像ハッシュ用
 from io import BytesIO
 from PIL import Image
 
@@ -131,7 +131,7 @@ NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
 # ------------------------------------------------------------------
-# APIキー、モデル設定
+# APIキー、モデル設定（Gemini API）
 # ------------------------------------------------------------------
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
@@ -223,7 +223,9 @@ def load_image_classification_model():
 extractor, vit_model = load_image_classification_model()
 
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
-    """ViTで画像分類を行い、上位3クラスを文字列化"""
+    """ViTで画像分類を行い、上位3クラスを文字列化。画像がRGBでない場合はRGBに変換する"""
+    if pil_image.mode != "RGB":
+        pil_image = pil_image.convert("RGB")
     inputs = extractor(pil_image, return_tensors="pt")
     with torch.no_grad():
         outputs = vit_model(**inputs)
@@ -380,7 +382,7 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば、キャッシュを利用して解析し、すぐに会話開始
+# 2) 画像アップロードがあれば、キャッシュを利用して解析し、会話開始
 # ------------------------------------------------------------------
 if uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
@@ -389,11 +391,11 @@ if uploaded_image is not None:
         analysis_text = st.session_state.analyzed_images[image_hash]
     else:
         pil_img = Image.open(BytesIO(image_bytes))
-        label_text = analyze_image_with_vit(pil_img)  # ViTでの解析
+        label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
         analysis_text = f"アップロードされた画像の推定結果: {label_text}"
         st.session_state.analyzed_images[image_hash] = analysis_text
 
-    # (A) 解析結果をチャットログへ追加 & 表示
+    # (A) 解析結果をチャットログへ追加＆表示
     st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
     with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
         st.markdown(
@@ -401,7 +403,7 @@ if uploaded_image is not None:
             unsafe_allow_html=True,
         )
 
-    # (B) 解析結果をもとに4人＋新キャラが会話するプロンプトを生成
+    # (B) 解析結果をもとに、4人＋新キャラが画像について会話するプロンプトを生成
     persona_params = adjust_parameters("image analysis", ai_age)
     discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
     for line in discussion_about_image.split("\n"):
