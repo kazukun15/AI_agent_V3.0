@@ -223,7 +223,7 @@ def load_image_classification_model():
 extractor, vit_model = load_image_classification_model()
 
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
-    """ViTで画像分類を行い、上位3クラスを文字列化。画像がRGBでない場合はRGBに変換する"""
+    """ViTで画像分類を行い、上位3クラスを文字列化。RGB変換済み"""
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
     inputs = extractor(pil_image, return_tensors="pt")
@@ -331,19 +331,17 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     return call_gemini_api(prompt)
 
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
+    """
+    アップロードされた画像に関連しそうな話題を、友達同士で気軽に始めるプロンプトを生成する。
+    解析結果そのものの議論はせず、画像に関連する話題（例：風景なら旅行の話、動物なら飼育の話など）を始めるように指示する。
+    """
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = generate_new_character()
     prompt = (
         f"【{current_user}さんが画像をアップロードしました】\n"
-        f"解析結果: {analysis_text}\n\n"
-        f"このAIは{ai_age}歳として振る舞います。\n"
-    )
-    for name, params in persona_params.items():
-        prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    prompt += (
-        f"新キャラクターとして {new_name} は【{new_personality}】な性格も加わります。\n"
-        "\n4人は友達同士のように、この画像解析結果について気楽に話し合ってください。\n"
-        "例えば、『犬っぽいけど毛の色が違うね』など自然な雑談をしてください。\n"
+        f"画像の推定結果: {analysis_text}\n\n"
+        "この画像に関連する話題について、4人の友達（ゆかり、しんや、みのる、新キャラクター）が気軽に雑談を始めてください。\n"
+        "画像の内容そのものを詳しく分析するのではなく、画像にまつわるエピソードや印象、関連する話題を自由に話し合ってください。\n"
         "出力形式は以下の通りです。\n"
         f"ゆかり: 発言内容\n"
         f"しんや: 発言内容\n"
@@ -392,7 +390,7 @@ if uploaded_image is not None:
     else:
         pil_img = Image.open(BytesIO(image_bytes))
         label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
-        analysis_text = f"アップロードされた画像の推定結果: {label_text}"
+        analysis_text = f"{label_text}"
         st.session_state.analyzed_images[image_hash] = analysis_text
 
     # (A) 解析結果をチャットログへ追加＆表示
@@ -403,7 +401,7 @@ if uploaded_image is not None:
             unsafe_allow_html=True,
         )
 
-    # (B) 解析結果をもとに、4人＋新キャラが画像について会話するプロンプトを生成
+    # (B) 解析結果をもとに、画像に関連する話題を友達が始める
     persona_params = adjust_parameters("image analysis", ai_age)
     discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
     for line in discussion_about_image.split("\n"):
