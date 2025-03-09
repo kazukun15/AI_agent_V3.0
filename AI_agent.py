@@ -5,13 +5,20 @@ import re
 import random
 import json
 from PIL import Image
+from io import BytesIO
+
+# ▼ 画像解析用に追加
+import torch
+from transformers import AutoFeatureExtractor, ResNetForImageClassification
+# ▲ 画像解析用に追加
+
 from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
 
 # ------------------------------------------------------------------
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0")
+st.title("ぼくのともだち V3.0 + 画像解析")
 
 # ------------------------------------------------------------------
 # 同じディレクトリにある config.toml を読み込み（テーマ設定）
@@ -107,12 +114,15 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.quiz_active = True
     st.session_state.quiz_question = quiz["question"]
     st.session_state.quiz_answer = quiz["answer"]
-    # チャット履歴にクイズ情報を追加
     if "messages" not in st.session_state:
         st.session_state.messages = []
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
-st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+# ------------------------------------------------------------------
+# 画像アップロード欄
+# ------------------------------------------------------------------
+st.sidebar.header("画像解析")
+uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
 # キャラクター定義（固定メンバー）
@@ -139,11 +149,10 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # ------------------------------------------------------------------
-# 画像読み込み（AI_agent_V3.0/avatars/ に配置している想定）
-# パスはフォルダ構成に合わせて修正してください
+# 画像読み込み（avatarsディレクトリ）
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-avatar_dir = os.path.join(BASE_DIR, "avatars")  # avatarsディレクトリ
+avatar_dir = os.path.join(BASE_DIR, "avatars")
 
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
@@ -167,7 +176,8 @@ avatar_img_dict = {
     MINORU_NAME: img_minoru,
     NEW_CHAR_NAME: img_newchar,
     ASSISTANT_NAME: "🤖",
-    "クイズ": "❓",  # クイズ用のアイコン
+    "クイズ": "❓",
+    "画像解析": "🖼️",
 }
 
 # ------------------------------------------------------------------
@@ -210,10 +220,42 @@ def call_gemini_api(prompt: str) -> str:
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 # ------------------------------------------------------------------
+# 画像解析モデルのロード (ResNetベース)
+# ------------------------------------------------------------------
+@st.cache_resource
+def load_image_classification_model():
+    model_name = "microsoft/resnet-50"
+    extractor = AutoFeatureExtractor.from_pretrained(model_name)
+    model = ResNetForImageClassification.from_pretrained(model_name)
+    model.eval()
+    return extractor, model
+
+extractor, resnet_model = load_image_classification_model()
+
+def analyze_image_with_resnet(pil_image: Image.Image) -> str:
+    """ResNetで画像分類を行い、上位3クラスと確信度を文字列化"""
+    inputs = extractor(pil_image, return_tensors="pt")
+    with torch.no_grad():
+        outputs = resnet_model(**inputs)
+    logits = outputs.logits
+    topk = logits.topk(3)
+    top_indices = topk.indices[0].tolist()
+    top_scores = topk.values[0].tolist()
+    labels = resnet_model.config.id2label
+
+    result_str = []
+    # 確率計算
+    probs = torch.nn.functional.softmax(logits, dim=1)[0]
+    for idx, score in zip(top_indices, top_scores):
+        label_name = labels[idx]
+        confidence = probs[idx].item()
+        result_str.append(f"{label_name} ({confidence*100:.1f}%)")
+    return ", ".join(result_str)
+
+# ------------------------------------------------------------------
 # 会話生成関連の関数
 # ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
-    """ユーザーの質問内容から、感情寄りか論理寄りかを判定するためのスコアを算出"""
     score = 0
     keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
     keywords_logical = ["理由", "原因", "仕組み", "方法"]
@@ -226,24 +268,17 @@ def analyze_question(question: str) -> int:
     return score
 
 def adjust_parameters(question: str, ai_age: int) -> dict:
-    """質問内容とAI年齢を元に、各キャラの口調や回答スタイルを設定"""
     score = analyze_question(question)
     params = {}
-    
-    # 年齢帯ごとに基本スタイルを変える
     if ai_age < 30:
-        # 若い感じ
         params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "とにかくエネルギッシュでポジティブな回答"}
         if score > 0:
-            # 悩み寄りの内容なら共感的
             params[SHINYA_NAME] = {"style": "共感的", "detail": "若々しい感性で共感しながら答える"}
             params[MINORU_NAME] = {"style": "柔軟", "detail": "自由な発想で斬新な視点から回答する"}
         else:
-            # 論理寄りの内容なら分析的
             params[SHINYA_NAME] = {"style": "分析的", "detail": "新しい視点を持ちつつ、若々しく冷静に答える"}
             params[MINORU_NAME] = {"style": "客観的", "detail": "柔軟な思考で率直に事実を述べる"}
     elif ai_age < 50:
-        # 中年くらい
         params[YUKARI_NAME] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
         if score > 0:
             params[SHINYA_NAME] = {"style": "共感的", "detail": "深い理解と共感を込めた回答"}
@@ -252,7 +287,6 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
             params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静な視点から根拠をもって説明する"}
             params[MINORU_NAME] = {"style": "客観的", "detail": "理論的かつ中立的な視点で回答する"}
     else:
-        # シニア寄り
         params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験と知識に基づいた落ち着いた回答"}
         if score > 0:
             params[SHINYA_NAME] = {"style": "共感的", "detail": "深い洞察と共感で優しく答える"}
@@ -263,21 +297,19 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
     return params
 
 def generate_new_character() -> tuple:
-    """サイドバーで入力があればそれを使い、なければランダム生成"""
     if custom_new_char_name.strip() and custom_new_char_personality.strip():
         return custom_new_char_name.strip(), custom_new_char_personality.strip()
-    # ランダム生成用の候補
     candidates = [
         ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
         ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
         ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
         ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-        ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する"),
+        ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
     ]
     return random.choice(candidates)
 
 def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str:
-    """会話冒頭用のプロンプトを作成してGeminiに投げる"""
+    """ユーザーからの質問に対する会話を最初に生成"""
     current_user = st.session_state.get("user_name", "ユーザー")
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     prompt += f"このAIは{ai_age}歳として振る舞います。\n"
@@ -297,7 +329,7 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int) -> str
     return call_gemini_api(prompt)
 
 def continue_discussion(additional_input: str, current_discussion: str) -> str:
-    """会話継続用のプロンプトを作成してGeminiに投げる"""
+    """ユーザーの追加発言がある場合に会話を継続"""
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n" +
@@ -311,8 +343,37 @@ def continue_discussion(additional_input: str, current_discussion: str) -> str:
     )
     return call_gemini_api(prompt)
 
+# ▼ 追加: 画像解析結果をプロンプトに組み込んで4人が話す会話を生成
+def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
+    """
+    画像解析結果を受けて、4人＋新キャラがそれについて会話する。
+    実際には「この画像は〇〇が写っているようだけど、どう思う？」という形で話し合う。
+    """
+    current_user = st.session_state.get("user_name", "ユーザー")
+    new_name, new_personality = generate_new_character()
+    
+    prompt = (
+        f"【{current_user}さんが画像をアップロードしました】\n"
+        f"解析結果: {analysis_text}\n\n"
+        f"このAIは{ai_age}歳として振る舞います。\n"
+    )
+    # キャラクターの口調設定
+    for name, params in persona_params.items():
+        prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
+    prompt += f"新キャラクターとして {new_name} は【{new_personality}】な性格も加わります。\n"
+    prompt += (
+        "\n4人は友達同士のように、この画像解析結果について気楽に話し合ってください。\n"
+        "例えば、『犬っぽいけど毛の色が違うね』など自然な雑談をしてください。\n"
+        "出力形式は以下の通りです。\n"
+        f"ゆかり: 発言内容\n"
+        f"しんや: 発言内容\n"
+        f"みのる: 発言内容\n"
+        f"{new_name}: 発言内容\n"
+        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
+    )
+    return call_gemini_api(prompt)
+
 def generate_summary(discussion: str) -> str:
-    """会話のまとめ用"""
     prompt = (
         "以下は4人の会話内容です。\n" + discussion + "\n\n" +
         "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
@@ -327,7 +388,6 @@ for msg in st.session_state.messages:
     role = msg["role"]
     content = msg["content"]
     display_name = user_name if role == "user" else role
-    # ロールが user ならユーザーとして右寄せで表示
     if role == "user":
         with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
@@ -335,7 +395,6 @@ for msg in st.session_state.messages:
                 unsafe_allow_html=True,
             )
     else:
-        # クイズや各キャラ、あるいはデフォルト
         with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
@@ -343,7 +402,55 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) ユーザーの新規入力を st.chat_input から取得
+# 2) 画像アップロードがあれば解析し、さらに会話（画像についてのトーク）を生成
+# ------------------------------------------------------------------
+if uploaded_image is not None:
+    try:
+        pil_img = Image.open(uploaded_image)
+        # 解析して上位3ラベルを文字列化
+        label_text = analyze_image_with_resnet(pil_img)  # 例: "Maltese_dog (92.1%), Chihuahua (2.3%), ..."
+        analysis_text = f"アップロードされた画像は: {label_text}"
+        
+        # 表示: 解析結果をチャットログに追加
+        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+        with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+                unsafe_allow_html=True,
+            )
+        
+        # 画像について友達4人が会話するプロンプト
+        persona_params = adjust_parameters("image analysis", ai_age)
+        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+        
+        # 会話を行ごとに区切り、チャットログに追加
+        for line in discussion_about_image.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                
+                st.session_state.messages.append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+        
+    except Exception as e:
+        st.error(f"画像解析中にエラーが発生しました: {e}")
+
+# ------------------------------------------------------------------
+# 3) ユーザーの新規入力（テキスト）を st.chat_input で受け取り
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
@@ -355,7 +462,6 @@ if user_input:
             quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
         st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
         
-        # 表示
         with st.chat_message("クイズ", avatar=avatar_img_dict["クイズ"]):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
@@ -363,7 +469,6 @@ if user_input:
             )
         st.session_state.quiz_active = False  # クイズ終了
     else:
-        # 通常の会話
         # (1) ユーザー発話をチャットログに追加 & 表示
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
@@ -373,13 +478,12 @@ if user_input:
             )
         
         # (2) Geminiに投げるプロンプトを作成 -> 応答を受け取る
+        # 最初の発言なら generate_discussion、2回目以降は continue_discussion
         if len(st.session_state.messages) == 1:
-            # 会話が最初の発話の場合
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion(user_input, persona_params, ai_age)
         else:
-            # 2回目以降なら会話を続ける
-            # これまでのキャラ発言だけ抜き出して1つのテキストにまとめる
+            # 既存キャラのセリフだけ時系列で繋げる
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
@@ -395,10 +499,7 @@ if user_input:
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
                 
-                # チャットログに追加
                 st.session_state.messages.append({"role": role, "content": content})
-                
-                # 表示
                 display_name = user_name if role == "user" else role
                 if role == "user":
                     with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
