@@ -135,8 +135,24 @@ ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"  # ※この表示は使わず、実際の名前は session_state.new_char で管理する
+NEW_CHAR_NAME = "新キャラクター"  # 表示用のキー
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+
+# ------------------------------------------------------------------
+# 新キャラクター情報の初期化（アプリ起動時に一度だけ生成）
+# ------------------------------------------------------------------
+if "new_char" not in st.session_state:
+    if custom_new_char_name.strip() and custom_new_char_personality.strip():
+        st.session_state.new_char = (custom_new_char_name.strip(), custom_new_char_personality.strip())
+    else:
+        candidates = [
+            ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
+            ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
+            ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
+            ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
+            ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
+        ]
+        st.session_state.new_char = random.choice(candidates)
 
 # ------------------------------------------------------------------
 # APIキー、モデル設定（Gemini API）
@@ -145,7 +161,7 @@ API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
-# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ、新キャラクター情報
+# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -155,20 +171,6 @@ if "last_uploaded_hash" not in st.session_state:
     st.session_state.last_uploaded_hash = None
 if "search_cache" not in st.session_state:
     st.session_state.search_cache = {}
-if "new_char" not in st.session_state:
-    # 新キャラクターの情報を一度だけ生成して保存する
-    def generate_new_character():
-        if custom_new_char_name.strip() and custom_new_char_personality.strip():
-            return custom_new_char_name.strip(), custom_new_char_personality.strip()
-        candidates = [
-            ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-            ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-            ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-            ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-            ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-        ]
-        return random.choice(candidates)
-    st.session_state.new_char = generate_new_character()
 
 # ------------------------------------------------------------------
 # アバター画像の読み込み
@@ -190,8 +192,7 @@ avatar_img_dict = {
     YUKARI_NAME: img_yukari,
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
-    # 新キャラクターの画像は、session_state.new_char に基づいて表示するか、固定の画像を利用
-    NEW_CHAR_NAME: img_newchar,
+    NEW_CHAR_NAME: img_newchar,  # 新キャラクターの画像は固定
     ASSISTANT_NAME: "🤖",
     "クイズ": "❓",
     "画像解析": "🖼️",
@@ -339,29 +340,9 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
             params[MINORU_NAME] = {"style": "客観的", "detail": "慎重かつ冷静に事実を丁寧に伝える"}
     return params
 
-def generate_new_character() -> tuple:
-    # 新キャラクター情報は session_state.new_char で管理しているのでここでは再生成しない
-    return st.session_state.new_char
-
 def generate_discussion(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
-    # 新キャラクター情報の取得
-    if "new_char" not in st.session_state:
-        # ここで一度だけ生成して session_state に保存
-        def _gen_new_char():
-            if custom_new_char_name.strip() and custom_new_char_personality.strip():
-                return custom_new_char_name.strip(), custom_new_char_personality.strip()
-            candidates = [
-                ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-                ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-                ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-                ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-                ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-            ]
-            return random.choice(candidates)
-        st.session_state.new_char = _gen_new_char()
     new_name, new_personality = st.session_state.new_char
-
     prompt = f"【{current_user}さんの質問】\n{question}\n\n"
     if search_info:
         prompt += f"最新の情報によると、{search_info}という報告があります。\n"
@@ -383,21 +364,7 @@ def generate_discussion(question: str, persona_params: dict, ai_age: int, search
 
 def continue_discussion(additional_input: str, current_discussion: str, search_info: str = "") -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
-    if "new_char" not in st.session_state:
-        def _gen_new_char():
-            if custom_new_char_name.strip() and custom_new_char_personality.strip():
-                return custom_new_char_name.strip(), custom_new_char_personality.strip()
-            candidates = [
-                ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-                ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-                ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-                ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-                ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-            ]
-            return random.choice(candidates)
-        st.session_state.new_char = _gen_new_char()
     new_name, _ = st.session_state.new_char
-
     prompt = (
         "これまでの会話:\n" + current_discussion + "\n\n" +
         "ユーザーの追加発言: " + additional_input + "\n\n"
@@ -418,21 +385,7 @@ def continue_discussion(additional_input: str, current_discussion: str, search_i
 
 def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
-    if "new_char" not in st.session_state:
-        def _gen_new_char():
-            if custom_new_char_name.strip() and custom_new_char_personality.strip():
-                return custom_new_char_name.strip(), custom_new_char_personality.strip()
-            candidates = [
-                ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-                ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-                ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-                ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-                ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-            ]
-            return random.choice(candidates)
-        st.session_state.new_char = _gen_new_char()
     new_name, new_personality = st.session_state.new_char
-
     prompt = (
         f"【{current_user}さんが画像をアップロードしました】\n"
         f"画像の推定結果: {analysis_text}\n\n"
@@ -550,7 +503,7 @@ if uploaded_image is not None:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延
+                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
 # ------------------------------------------------------------------
 # 3) テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
@@ -608,4 +561,4 @@ if user_input:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(1, 3))  # ランダムな遅延
+                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
