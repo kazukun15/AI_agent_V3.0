@@ -22,7 +22,7 @@ from streamlit_chat import message  # streamlit-chat のメッセージ表示用
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0 + 画像解析＆検索")
+st.title("ぼくのともだち V3.0 +")
 
 # ------------------------------------------------------------------
 # config.toml の読み込み（テーマ設定）
