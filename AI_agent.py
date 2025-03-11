@@ -150,14 +150,17 @@ def check_gemini_api_status():
 
 def check_tavily_api_status():
     url = "https://api.tavily.com/search"
-    # "q" を "query" に変更
     payload = {
         "query": "test",
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        # secrets.toml で token キーに合わせ、X-API-Key ヘッダーで送信
+        "X-API-Key": st.secrets["tavily"]["token"]
+    }
     try:
         response = requests.post(url, json=payload, headers=headers)
     except Exception as e:
@@ -314,12 +317,15 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     payload = {
-        "query": query,  # "q" ではなく "query" を使用
+        "query": query,  # "query" キーを使用
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": st.secrets["tavily"]["token"]
+    }
     try:
         response = requests.post(url, json=payload, headers=headers)
         data = response.json()
