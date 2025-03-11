@@ -136,6 +136,11 @@ st.sidebar.header("APIステータス")
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
+# Tavily API 用のキーを安全に取得（キー名は api_key に合わせる）
+tavily_api_key = st.secrets.get("tavily", {}).get("api_key", "")
+if not tavily_api_key:
+    st.error("Tavily の API キーが設定されていません。secrets.toml を確認してください。")
+
 def check_gemini_api_status():
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": "ステータスチェック"}]}]}
@@ -158,7 +163,7 @@ def check_tavily_api_status():
     }
     headers = {
         "Content-Type": "application/json",
-        "X-API-Key": st.secrets["tavily"]["token"]
+        "X-API-Key": tavily_api_key
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -325,7 +330,7 @@ def cached_get_search_info(query: str) -> str:
     }
     headers = {
         "Content-Type": "application/json",
-        "X-API-Key": st.secrets["tavily"]["token"]
+        "X-API-Key": tavily_api_key
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
