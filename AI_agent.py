@@ -148,26 +148,44 @@ def check_gemini_api_status():
         return f"エラー: ステータスコード {response.status_code} -> {response.text}"
     return "OK"
 
-def check_tavily_api_status():
+# cached_get_search_info はキャッシュを活用し、503（Service Unavailable）なら特定の値を返す
+@st.cache_data(show_spinner=False)
+def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     payload = {
-        "query": "test",
+        "query": query,
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
     headers = {
         "Content-Type": "application/json",
-        # secrets.toml で token キーに合わせ、X-API-Key ヘッダーで送信
         "X-API-Key": st.secrets["tavily"]["token"]
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 503:
+            return "__SERVICE_UNAVAILABLE__"
+        elif response.status_code != 200:
+            return ""
+        data = response.json()
+        result = data.get("AbstractText", "")
+        return result
     except Exception as e:
-        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
-    if response.status_code != 200:
-        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
-    return "OK"
+        return ""
+
+# async_get_search_info では、キャッシュ結果を取得し、503時は内部でインターネット検索を無効化
+executor = ThreadPoolExecutor(max_workers=1)
+def async_get_search_info(query: str) -> str:
+    if st.session_state.get("internet_disabled", False):
+        return ""
+    with st.spinner("最新情報を検索中…"):
+        future = executor.submit(cached_get_search_info, query)
+        result = future.result()
+        if result == "__SERVICE_UNAVAILABLE__":
+            st.session_state["internet_disabled"] = True
+            return ""
+        return result
 
 gemini_status = check_gemini_api_status()
 tavily_status = check_tavily_api_status()
@@ -317,7 +335,7 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     payload = {
-        "query": query,  # "query" キーを使用
+        "query": query,
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
@@ -328,6 +346,10 @@ def cached_get_search_info(query: str) -> str:
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 503:
+            return "__SERVICE_UNAVAILABLE__"
+        elif response.status_code != 200:
+            return ""
         data = response.json()
         result = data.get("AbstractText", "")
         return result
@@ -335,11 +357,16 @@ def cached_get_search_info(query: str) -> str:
         return ""
 
 executor = ThreadPoolExecutor(max_workers=1)
-
 def async_get_search_info(query: str) -> str:
+    if st.session_state.get("internet_disabled", False):
+        return ""
     with st.spinner("最新情報を検索中…"):
         future = executor.submit(cached_get_search_info, query)
-        return future.result()
+        result = future.result()
+        if result == "__SERVICE_UNAVAILABLE__":
+            st.session_state["internet_disabled"] = True
+            return ""
+        return result
 
 # ------------------------------------------------------------------
 # 会話生成関連の関数
