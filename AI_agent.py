@@ -117,15 +117,53 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 # ------------------------------------------------------------------
-# サイドバーに画像アップロード欄
+# サイドバー：画像解析用アップロード
 # ------------------------------------------------------------------
 st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
 # ------------------------------------------------------------------
-# インターネット検索利用のON/OFFを切り替えるチェックボックス
+# サイドバー：インターネット検索利用のON/OFF
 # ------------------------------------------------------------------
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
+
+# ------------------------------------------------------------------
+# サイドバー：APIステータス確認
+# ------------------------------------------------------------------
+st.sidebar.header("APIステータス確認")
+def check_gemini_api_status():
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
+    payload = {"contents": [{"parts": [{"text": "ステータスチェック"}]}]}
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+    except Exception as e:
+        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
+    if response.status_code != 200:
+        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
+    return "OK"
+
+def check_tavily_api_status():
+    url = "https://api.tavily.com/search"
+    params = {
+        "q": "test",
+        "format": "json",
+        "no_html": 1,
+        "skip_disambig": 1,
+    }
+    try:
+        response = requests.get(url, params=params)
+    except Exception as e:
+        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
+    if response.status_code != 200:
+        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
+    return "OK"
+
+if st.sidebar.button("APIステータス確認"):
+    gemini_status = check_gemini_api_status()
+    tavily_status = check_tavily_api_status()
+    st.sidebar.write("Gemini API: ", gemini_status)
+    st.sidebar.write("Tavily API: ", tavily_status)
 
 # ------------------------------------------------------------------
 # キャラクター定義
@@ -270,11 +308,11 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
-# インターネット検索結果取得（DuckDuckGo API利用＋キャッシュ＆非同期処理）
+# インターネット検索結果取得（Tavily API利用＋キャッシュ＆非同期処理）
 # ------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
-    url = "https://api.duckduckgo.com/"
+    url = "https://api.tavily.com/search"
     params = {
         "q": query,
         "format": "json",
@@ -410,34 +448,7 @@ def generate_summary(discussion: str) -> str:
     return call_gemini_api(prompt)
 
 # ------------------------------------------------------------------
-# インターネット検索実行（DuckDuckGo API利用＋キャッシュ＆非同期処理）
-# ------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def cached_get_search_info(query: str) -> str:
-    url = "https://api.duckduckgo.com/"
-    params = {
-        "q": query,
-        "format": "json",
-        "no_html": 1,
-        "skip_disambig": 1,
-    }
-    try:
-        response = requests.get(url, params=params)
-        data = response.json()
-        result = data.get("AbstractText", "")
-        return result
-    except Exception as e:
-        return ""
-
-executor = ThreadPoolExecutor(max_workers=1)
-
-def async_get_search_info(query: str) -> str:
-    with st.spinner("最新情報を検索中…"):
-        future = executor.submit(cached_get_search_info, query)
-        return future.result()
-
-# ------------------------------------------------------------------
-# 1) 既存のチャットメッセージを表示
+# 既存のチャットメッセージを表示
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
@@ -457,7 +468,7 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
+# 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
 # ------------------------------------------------------------------
 if uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
@@ -504,8 +515,9 @@ if uploaded_image is not None:
                             unsafe_allow_html=True,
                         )
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+
 # ------------------------------------------------------------------
-# 3) テキスト入力（st.chat_input）による通常会話
+# テキスト入力（st.chat_input）による通常会話
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
