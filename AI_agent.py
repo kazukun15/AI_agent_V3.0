@@ -89,64 +89,129 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# 関数定義（まずは必要な関数を定義）
+# ユーザーの名前入力＆AIの年齢入力（上部）
 # ------------------------------------------------------------------
+user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+# AIの年齢は10代以上から選択できるように、min_value=10に設定
+ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
 
-def analyze_question(question: str) -> int:
-    """質問文から感情キーワードと論理キーワードを解析し、スコアを返す"""
-    score = 0
-    keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
-    keywords_logical = ["理由", "原因", "仕組み", "方法"]
-    for word in keywords_emotional:
-        if re.search(word, question):
-            score += 1
-    for word in keywords_logical:
-        if re.search(word, question):
-            score -= 1
-    return score
+# ------------------------------------------------------------------
+# サイドバー：カスタム新キャラクター設定、クイズ、画像アップロード、検索利用
+# ------------------------------------------------------------------
+st.sidebar.header("カスタム新キャラクター設定")
+custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
+custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
 
-def adjust_parameters(question: str, ai_age: int) -> dict:
-    """
-    質問とAIの年齢に応じて、各キャラクターのプロンプトパラメータを生成する
-    ※若年層、中年層、シニア層で回答のスタイルを変えています。
-    """
-    score = analyze_question(question)
-    params = {}
-    if ai_age < 30:
-        params["ゆかり"] = {"style": "明るくはっちゃけた", "detail": "とにかくエネルギッシュでポジティブな回答"}
-        if score > 0:
-            params["しんや"] = {"style": "共感的", "detail": "若々しい感性で共感しながら答える"}
-            params["みのる"] = {"style": "柔軟", "detail": "自由な発想で斬新な視点から回答する"}
-        else:
-            params["しんや"] = {"style": "分析的", "detail": "新しい視点を持ちつつ、若々しく冷静に答える"}
-            params["みのる"] = {"style": "客観的", "detail": "柔軟な思考で率直に事実を述べる"}
-    elif ai_age < 50:
-        params["ゆかり"] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
-        if score > 0:
-            params["しんや"] = {"style": "共感的", "detail": "深い理解と共感を込めた回答"}
-            params["みのる"] = {"style": "柔軟", "detail": "実務的な視点から多角的な意見を提供"}
-        else:
-            params["しんや"] = {"style": "分析的", "detail": "冷静な視点から根拠をもって説明する"}
-            params["みのる"] = {"style": "客観的", "detail": "理論的かつ中立的な視点で回答する"}
-    else:
-        params["ゆかり"] = {"style": "賢明で穏やかな", "detail": "豊富な経験と知識に基づいた落ち着いた回答"}
-        if score > 0:
-            params["しんや"] = {"style": "共感的", "detail": "深い洞察と共感で優しく答える"}
-            params["みのる"] = {"style": "柔軟", "detail": "多面的な知見から慎重に意見を述べる"}
-        else:
-            params["しんや"] = {"style": "分析的", "detail": "豊かな経験に基づいた緻密な説明"}
-            params["みのる"] = {"style": "客観的", "detail": "慎重かつ冷静に事実を丁寧に伝える"}
-    return params
+st.sidebar.header("ミニゲーム／クイズ")
+if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
+    quiz_list = [
+        {"question": "日本の首都は？", "answer": "東京"},
+        {"question": "富士山の標高は何メートル？", "answer": "3776"},
+        {"question": "寿司の主な具材は何？", "answer": "酢飯"},
+        {"question": "桜の花言葉は？", "answer": "美しさ"}
+    ]
+    quiz = random.choice(quiz_list)
+    st.session_state.quiz_active = True
+    st.session_state.quiz_question = quiz["question"]
+    st.session_state.quiz_answer = quiz["answer"]
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = []
+    st.session_state["messages"].append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
+st.sidebar.header("画像解析")
+# 画像アップローダーは1つだけ表示（キーは "file_uploader_key"）
+uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
+
+# インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
+use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+
+# ------------------------------------------------------------------
+# キャラクター定義（固定メンバー）
+# ------------------------------------------------------------------
+USER_NAME = "user"
+ASSISTANT_NAME = "assistant"
+YUKARI_NAME = "ゆかり"
+SHINYA_NAME = "しんや"
+MINORU_NAME = "みのる"
+NEW_CHAR_NAME = "新キャラクター"
+NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
+
+# 新キャラクターはセッションに一度だけ生成（固定化）
+if "new_char" not in st.session_state:
+    def generate_new_character():
+        """サイドバーで入力があればそれを使い、なければランダム"""
+        if custom_new_char_name.strip() and custom_new_char_personality.strip():
+            return custom_new_char_name.strip(), custom_new_char_personality.strip()
+        candidates = [
+            ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
+            ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
+            ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
+            ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
+            ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
+        ]
+        return random.choice(candidates)
+    st.session_state.new_char = generate_new_character()
+new_name, new_personality = st.session_state.new_char
+
+# ------------------------------------------------------------------
+# APIキー、モデル設定（Gemini API）
+# ------------------------------------------------------------------
+API_KEY = st.secrets["general"]["api_key"]
+MODEL_NAME = "gemini-2.0-flash-001"
+
+# ------------------------------------------------------------------
+# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ、APIステータス
+# ------------------------------------------------------------------
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
+if "analyzed_images" not in st.session_state:
+    st.session_state["analyzed_images"] = {}
+if "last_uploaded_hash" not in st.session_state:
+    st.session_state.last_uploaded_hash = None
+if "search_cache" not in st.session_state:
+    st.session_state.search_cache = {}
+if "gemini_status" not in st.session_state:
+    st.session_state.gemini_status = ""
+if "tavily_status" not in st.session_state:
+    st.session_state.tavily_status = ""
+
+# ------------------------------------------------------------------
+# アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
+# ------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+avatar_dir = os.path.join(BASE_DIR, "avatars")
+try:
+    img_user = Image.open(os.path.join(avatar_dir, "user.png"))
+    img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
+    img_shinya = Image.open(os.path.join(avatar_dir, "shinya.png"))
+    img_minoru = Image.open(os.path.join(avatar_dir, "minoru.png"))
+    img_newchar = Image.open(os.path.join(avatar_dir, "new_character.png"))
+except Exception as e:
+    st.error(f"画像読み込みエラー: {e}")
+    img_user, img_yukari, img_shinya, img_minoru, img_newchar = "👤", "🌸", "🌊", "🍀", "⭐"
+
+avatar_img_dict = {
+    USER_NAME: img_user,
+    YUKARI_NAME: img_yukari,
+    SHINYA_NAME: img_shinya,
+    MINORU_NAME: img_minoru,
+    NEW_CHAR_NAME: img_newchar,
+    ASSISTANT_NAME: "🤖",
+    "クイズ": "❓",
+    "画像解析": "🖼️",
+}
+
+# ------------------------------------------------------------------
+# Gemini API 呼び出し関数（requests 使用）＋ステータス表示
+# ------------------------------------------------------------------
 def remove_json_artifacts(text: str, pattern: str = r"'parts': \[\{'text':.*?\}\], 'role': 'model'") -> str:
-    """不要な文字列を正規表現で除去（patternは引数で変更可能）"""
     if not isinstance(text, str):
         text = str(text) if text else ""
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
 def call_gemini_api(prompt: str) -> str:
-    """Gemini API を呼び出して生成テキストを返す"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json"}
@@ -222,7 +287,7 @@ from concurrent.futures import ThreadPoolExecutor
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
-    # secret の形式は [tavily] api_key = "○○○" と仮定
+    # secret の形式は [tavily] api_key = "○○○" となっている前提
     api_key = st.secrets["tavily"]["api_key"]
     headers = {
          "Authorization": f"Bearer {api_key}",
@@ -319,7 +384,7 @@ def continue_discussion_parallel(additional_input: str, history: str, ai_age: in
 # ------------------------------------------------------------------
 # 既存のチャットメッセージを表示（st.chat_input 形式）
 # ------------------------------------------------------------------
-for msg in st.session_state.messages:
+for msg in st.session_state["messages"]:
     role = msg["role"]
     content = msg["content"]
     display_name = user_name if role == "user" else role
@@ -349,7 +414,7 @@ if user_input:
             quiz_result = "正解です！おめでとうございます！"
         else:
             quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
-        st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
+        st.session_state["messages"].append({"role": "クイズ", "content": quiz_result})
         with st.chat_message("クイズ", avatar=avatar_img_dict.get("クイズ", "❓")):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
@@ -362,16 +427,16 @@ if user_input:
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
-        st.session_state.messages.append({"role": "user", "content": user_input})
+        st.session_state["messages"].append({"role": "user", "content": user_input})
         
         # AI応答生成（並列処理を利用）
-        if len(st.session_state.messages) == 1:
+        if len(st.session_state["messages"]) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion_parallel(user_input, persona_params, ai_age, search_info=search_info)
         else:
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
-                for msg in st.session_state.messages
+                for msg in st.session_state["messages"]
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
             discussion = continue_discussion_parallel(user_input, history, ai_age, search_info=search_info)
@@ -382,7 +447,7 @@ if user_input:
                 parts = line.split(":", 1)
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state.messages.append({"role": role, "content": content})
+                st.session_state["messages"].append({"role": role, "content": content})
                 display_name = user_name if role == "user" else role
                 if role == "user":
                     with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
@@ -414,7 +479,7 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
             analysis_text = f"{label_text}"
             st.session_state.analyzed_images[image_hash] = analysis_text
 
-        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+        st.session_state["messages"].append({"role": "画像解析", "content": analysis_text})
         with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
@@ -429,7 +494,7 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 parts = line.split(":", 1)
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state.messages.append({"role": role, "content": content})
+                st.session_state["messages"].append({"role": role, "content": content})
                 display_name = user_name if role == "user" else role
                 if role == "user":
                     with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
@@ -449,8 +514,8 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
 # チャット履歴の表示
 # ------------------------------------------------------------------
 st.header("会話履歴")
-if st.session_state.messages:
-    for msg in reversed(st.session_state.messages):
+if st.session_state["messages"]:
+    for msg in reversed(st.session_state["messages"]):
         display_name = user_name if msg["role"] == "user" else msg["role"]
         if msg["role"] == "user":
             with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
