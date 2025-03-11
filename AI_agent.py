@@ -118,7 +118,7 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
-# ファイルアップローダーの重複生成を防ぐためのフラグ管理とユニークキー
+# ファイルアップローダーの重複生成を防ぐためのフラグ管理とユニークキーを利用
 if "file_uploader_created" not in st.session_state:
     st.session_state.file_uploader_created = False
 uploaded_image = None
@@ -127,11 +127,11 @@ if st.session_state.get("quiz_active", False) is False and not st.session_state.
     if uploaded_image is not None:
         st.session_state.file_uploader_created = True
 if st.session_state.get("quiz_active", False) is False and uploaded_image is None:
-    # すでに生成されている場合、ユニークキーで呼び出し
+    # 別のユニークキーで呼び出し
     uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="unique_file_uploader_key")
 
-# インターネット検索利用のON/OFF
-use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
+# インターネット検索利用のON/OFF（ユニークなキーを設定）
+use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox")
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
 # ------------------------------------------------------------------
@@ -188,7 +188,7 @@ if "tavily_status" not in st.session_state:
 # アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-avatar_dir = os.path.join(BASE_DIR, "avatars")  # ※ここを修正： "AI_agent_V3.0/avatars" → "avatars"
+avatar_dir = os.path.join(BASE_DIR, "avatars")
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
     img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
@@ -534,7 +534,7 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
     # インターネット検索利用（tavily API）
-    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True) else ""
+    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox") else ""
     
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
