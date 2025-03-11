@@ -599,7 +599,7 @@ if st.session_state.get("quiz_active", False) is False and st.sidebar.file_uploa
                                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                                 unsafe_allow_html=True,
                             )
-                    time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+                    time.sleep(random.uniform(3, 8))  # ランダムな遅延（3～10秒）
 
 # ------------------------------------------------------------------
 # チャット履歴の表示
