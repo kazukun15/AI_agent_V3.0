@@ -596,4 +596,4 @@ if user_input:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+                time.sleep(random.uniform(3, 7))  # ランダムな遅延（3～7秒）
