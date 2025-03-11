@@ -92,7 +92,6 @@ st.markdown(
 # ユーザーの名前入力＆AIの年齢入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-# AIの年齢は10代以上から選択できるように、min_value=10に設定
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -119,10 +118,8 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state["messages"].append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
-# 画像アップローダーは1つだけ表示（キーは "file_uploader_key"）
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
 
-# インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
@@ -137,10 +134,8 @@ MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
-# 新キャラクターはセッションに一度だけ生成（固定化）
 if "new_char" not in st.session_state:
     def generate_new_character():
-        """サイドバーで入力があればそれを使い、なければランダム"""
         if custom_new_char_name.strip() and custom_new_char_personality.strip():
             return custom_new_char_name.strip(), custom_new_char_personality.strip()
         candidates = [
@@ -203,7 +198,7 @@ avatar_img_dict = {
 }
 
 # ------------------------------------------------------------------
-# Gemini API 呼び出し関数（requests 使用）＋ステータス表示
+# Gemini API 呼び出し関数＋ステータス表示
 # ------------------------------------------------------------------
 def remove_json_artifacts(text: str, pattern: str = r"'parts': \[\{'text':.*?\}\], 'role': 'model'") -> str:
     if not isinstance(text, str):
@@ -287,8 +282,7 @@ from concurrent.futures import ThreadPoolExecutor
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
-    # secret の形式は [tavily] api_key = "○○○" となっている前提
-    api_key = st.secrets["tavily"]["api_key"]
+    api_key = st.secrets["tavily"]["api_key"]  # シークレット形式は [tavily] api_key = "○○○"
     headers = {
          "Authorization": f"Bearer {api_key}",
          "Content-Type": "application/json"
@@ -487,7 +481,8 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
             )
 
         persona_params = adjust_parameters("image analysis", ai_age)
-        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+        discussion_about_image = ""  # ※ここでは discuss_image_analysis 関数が定義されていないため、空文字列とします
+        # もし discuss_image_analysis 関数が必要であれば、適宜定義してください。
         for line in discussion_about_image.split("\n"):
             line = line.strip()
             if line:
