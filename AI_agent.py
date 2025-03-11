@@ -48,7 +48,7 @@ except Exception:
     font = "monospace"
 
 # ------------------------------------------------------------------
-# 背景・共通スタイルの設定
+# 背景・共通スタイルの設定（テーマ設定を反映）
 # ------------------------------------------------------------------
 st.markdown(
     f"""
@@ -67,6 +67,7 @@ st.markdown(
         margin-bottom: 20px;
         background-color: {secondaryBackgroundColor};
     }}
+    /* バブルチャット用のスタイル */
     .chat-bubble {{
         background-color: #d4f7dc;
         border-radius: 10px;
@@ -88,9 +89,13 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザーの名前・AIの年齢入力
+# ユーザーの名前入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
+
+# ------------------------------------------------------------------
+# AIの年齢入力（上部）
+# ------------------------------------------------------------------
 ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -116,43 +121,24 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
         st.session_state.messages = []
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
-# ------------------------------------------------------------------
-# サイドバーに画像アップロード欄
-# ------------------------------------------------------------------
 st.sidebar.header("画像解析")
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
 
-# ------------------------------------------------------------------
-# インターネット検索利用のON/OFFを切り替えるチェックボックス
-# ------------------------------------------------------------------
+# インターネット検索利用のON/OFF
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
 
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
+
 # ------------------------------------------------------------------
-# キャラクター定義
+# キャラクター定義（固定メンバー）
 # ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"  # 表示用のキー
+NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
-
-# ------------------------------------------------------------------
-# 新キャラクター情報の初期化（アプリ起動時に一度だけ生成）
-# ------------------------------------------------------------------
-if "new_char" not in st.session_state:
-    if custom_new_char_name.strip() and custom_new_char_personality.strip():
-        st.session_state.new_char = (custom_new_char_name.strip(), custom_new_char_personality.strip())
-    else:
-        candidates = [
-            ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
-            ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
-            ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
-            ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
-            ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
-        ]
-        st.session_state.new_char = random.choice(candidates)
 
 # ------------------------------------------------------------------
 # APIキー、モデル設定（Gemini API）
@@ -173,10 +159,10 @@ if "search_cache" not in st.session_state:
     st.session_state.search_cache = {}
 
 # ------------------------------------------------------------------
-# アバター画像の読み込み
+# アイコン画像の読み込み（AI_agent_V3.0/avatars/ に配置）
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-avatar_dir = os.path.join(BASE_DIR, "avatars")
+avatar_dir = os.path.join(BASE_DIR, "AI_agent_V3.0", "avatars")
 try:
     img_user = Image.open(os.path.join(avatar_dir, "user.png"))
     img_yukari = Image.open(os.path.join(avatar_dir, "yukari.png"))
@@ -192,14 +178,14 @@ avatar_img_dict = {
     YUKARI_NAME: img_yukari,
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
-    NEW_CHAR_NAME: img_newchar,  # 新キャラクターの画像は固定
+    NEW_CHAR_NAME: img_newchar,
     ASSISTANT_NAME: "🤖",
     "クイズ": "❓",
     "画像解析": "🖼️",
 }
 
 # ------------------------------------------------------------------
-# Gemini API 呼び出し関数
+# Gemini API 呼び出し関数（requests 使用）
 # ------------------------------------------------------------------
 def remove_json_artifacts(text: str) -> str:
     if not isinstance(text, str):
@@ -251,7 +237,7 @@ def load_image_classification_model():
 extractor, vit_model = load_image_classification_model()
 
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
-    """ViTで画像分類を行い、上位3クラスを文字列化。RGB変換済み"""
+    """ViTで画像分類を行い、上位3クラスを文字列化（RGB変換済み）"""
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
     inputs = extractor(pil_image, return_tensors="pt")
@@ -270,24 +256,40 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
-# インターネット検索結果取得（DuckDuckGo API利用＋キャッシュ＆非同期処理）
+# インターネット検索実行（tavily API利用＋キャッシュ＆非同期処理）
 # ------------------------------------------------------------------
+from concurrent.futures import ThreadPoolExecutor
+
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
-    url = "https://api.duckduckgo.com/"
-    params = {
-        "q": query,
-        "format": "json",
-        "no_html": 1,
-        "skip_disambig": 1,
+    # tavily API のエンドポイント、実際の仕様に合わせて変更してください
+    url = "https://api.tavily.com/search"
+    token = st.secrets["tavily"]["token"]
+    headers = {
+         "Authorization": f"Bearer {token}",
+         "Content-Type": "application/json"
+    }
+    payload = {
+         "query": query,
+         "topic": "general",
+         "search_depth": "basic",
+         "max_results": 1,
+         "time_range": None,
+         "days": 3,
+         "include_answer": True,
+         "include_raw_content": False,
+         "include_images": False,
+         "include_image_descriptions": False,
+         "include_domains": [],
+         "exclude_domains": []
     }
     try:
-        response = requests.get(url, params=params)
-        data = response.json()
-        result = data.get("AbstractText", "")
-        return result
+         response = requests.post(url, headers=headers, json=payload)
+         data = response.json()
+         result = data.get("answer", "")
+         return result
     except Exception as e:
-        return ""
+         return ""
 
 executor = ThreadPoolExecutor(max_workers=1)
 
@@ -297,7 +299,7 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # ------------------------------------------------------------------
-# 会話生成関連の関数
+# 会話生成関連関数
 # ------------------------------------------------------------------
 def analyze_question(question: str) -> int:
     score = 0
@@ -340,6 +342,19 @@ def adjust_parameters(question: str, ai_age: int) -> dict:
             params[MINORU_NAME] = {"style": "客観的", "detail": "慎重かつ冷静に事実を丁寧に伝える"}
     return params
 
+def generate_new_character() -> tuple:
+    """サイドバーで入力があればそれを使い、なければランダム"""
+    if custom_new_char_name.strip() and custom_new_char_personality.strip():
+        return custom_new_char_name.strip(), custom_new_char_personality.strip()
+    candidates = [
+        ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
+        ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
+        ("りさ", "自由奔放で斬新なアイデアを持つ、ユニークな感性の持ち主"),
+        ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
+        ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
+    ]
+    return random.choice(candidates)
+
 def generate_discussion(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
     current_user = st.session_state.get("user_name", "ユーザー")
     new_name, new_personality = st.session_state.new_char
@@ -378,8 +393,16 @@ def continue_discussion(additional_input: str, current_discussion: str, search_i
         "ゆかり: 発言内容\n"
         "しんや: 発言内容\n"
         "みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
+        "新キャラクター: 発言内容\n"
         "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
+    )
+    return call_gemini_api(prompt)
+
+def generate_summary(discussion: str) -> str:
+    prompt = (
+        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
+        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
+        "自然な日本語文で出力し、余計なJSON形式は不要です。"
     )
     return call_gemini_api(prompt)
 
@@ -401,33 +424,41 @@ def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int
     )
     return call_gemini_api(prompt)
 
-def generate_summary(discussion: str) -> str:
-    prompt = (
-        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
-        "自然な日本語文で出力し、余計なJSON形式は不要です。"
-    )
-    return call_gemini_api(prompt)
+# ------------------------------------------------------------------
+# インターネット検索実行（tavily API利用＋キャッシュ＆非同期処理）
+# ------------------------------------------------------------------
+from concurrent.futures import ThreadPoolExecutor
 
-# ------------------------------------------------------------------
-# インターネット検索実行（DuckDuckGo API利用＋キャッシュ＆非同期処理）
-# ------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
-    url = "https://api.duckduckgo.com/"
-    params = {
-        "q": query,
-        "format": "json",
-        "no_html": 1,
-        "skip_disambig": 1,
+    # tavily API のエンドポイント（仕様に合わせて調整してください）
+    url = "https://api.tavily.com/search"
+    token = st.secrets["tavily"]["token"]
+    headers = {
+         "Authorization": f"Bearer {token}",
+         "Content-Type": "application/json"
+    }
+    payload = {
+         "query": query,
+         "topic": "general",
+         "search_depth": "basic",
+         "max_results": 1,
+         "time_range": None,
+         "days": 3,
+         "include_answer": True,
+         "include_raw_content": False,
+         "include_images": False,
+         "include_image_descriptions": False,
+         "include_domains": [],
+         "exclude_domains": []
     }
     try:
-        response = requests.get(url, params=params)
-        data = response.json()
-        result = data.get("AbstractText", "")
-        return result
+         response = requests.post(url, headers=headers, json=payload)
+         data = response.json()
+         result = data.get("answer", "")
+         return result
     except Exception as e:
-        return ""
+         return ""
 
 executor = ThreadPoolExecutor(max_workers=1)
 
@@ -437,7 +468,7 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # ------------------------------------------------------------------
-# 1) 既存のチャットメッセージを表示
+# 既存のチャットメッセージを表示（Databricks Q&A bot 形式 + st.chat_input）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
@@ -457,60 +488,12 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
-# 2) 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
-# ------------------------------------------------------------------
-if uploaded_image is not None:
-    image_bytes = uploaded_image.getvalue()
-    image_hash = hashlib.md5(image_bytes).hexdigest()
-    if st.session_state.last_uploaded_hash != image_hash:
-        st.session_state.last_uploaded_hash = image_hash
-        if image_hash in st.session_state.analyzed_images:
-            analysis_text = st.session_state.analyzed_images[image_hash]
-        else:
-            pil_img = Image.open(BytesIO(image_bytes))
-            label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
-            analysis_text = f"{label_text}"
-            st.session_state.analyzed_images[image_hash] = analysis_text
-
-        # (A) 解析結果をチャットログへ追加＆表示
-        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
-        with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
-                unsafe_allow_html=True,
-            )
-
-        # (B) 画像に関連する話題を友達が始める
-        persona_params = adjust_parameters("image analysis", ai_age)
-        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
-        for line in discussion_about_image.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                role = parts[0]
-                content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state.messages.append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
-                if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                        st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                        st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
-# ------------------------------------------------------------------
-# 3) テキスト入力（st.chat_input）による通常会話
+# ユーザー入力の取得（st.chat_input）
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # インターネット検索を利用する場合は、キャッシュ＆非同期処理で結果を取得
-    search_info = async_get_search_info(user_input) if use_internet else ""
+    # インターネット検索利用（tavily API）
+    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True) else ""
     
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
@@ -525,12 +508,14 @@ if user_input:
             )
         st.session_state.quiz_active = False
     else:
-        st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
                 f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        
+        # AI応答生成
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
             discussion = generate_discussion(user_input, persona_params, ai_age, search_info=search_info)
@@ -541,6 +526,8 @@ if user_input:
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
             discussion = continue_discussion(user_input, history, search_info=search_info)
+        
+        # 生成された応答を改行区切りで解析して追加
         for line in discussion.split("\n"):
             line = line.strip()
             if line:
@@ -562,3 +549,76 @@ if user_input:
                             unsafe_allow_html=True,
                         )
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+
+# ------------------------------------------------------------------
+# 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
+# ------------------------------------------------------------------
+if st.session_state.get("quiz_active", False) is False and st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"]) is not None:
+    uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
+    if uploaded_image is not None:
+        image_bytes = uploaded_image.getvalue()
+        image_hash = hashlib.md5(image_bytes).hexdigest()
+        if st.session_state.last_uploaded_hash != image_hash:
+            st.session_state.last_uploaded_hash = image_hash
+            if image_hash in st.session_state.analyzed_images:
+                analysis_text = st.session_state.analyzed_images[image_hash]
+            else:
+                pil_img = Image.open(BytesIO(image_bytes))
+                label_text = analyze_image_with_vit(pil_img)  # ViTで解析
+                analysis_text = f"{label_text}"
+                st.session_state.analyzed_images[image_hash] = analysis_text
+
+            # 解析結果をチャットログに追加＆表示
+            st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+            with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # 画像に関連する話題を友達が開始
+            persona_params = adjust_parameters("image analysis", ai_age)
+            discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+            for line in discussion_about_image.split("\n"):
+                line = line.strip()
+                if line:
+                    parts = line.split(":", 1)
+                    role = parts[0]
+                    content = parts[1].strip() if len(parts) > 1 else ""
+                    st.session_state.messages.append({"role": role, "content": content})
+                    display_name = user_name if role == "user" else role
+                    if role == "user":
+                        with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                            st.markdown(
+                                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                            st.markdown(
+                                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                                unsafe_allow_html=True,
+                            )
+                    time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+
+# ------------------------------------------------------------------
+# チャット履歴の表示
+# ------------------------------------------------------------------
+st.header("会話履歴")
+if st.session_state.messages:
+    for msg in reversed(st.session_state.messages):
+        display_name = user_name if msg["role"] == "user" else msg["role"]
+        if msg["role"] == "user":
+            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+                st.markdown(
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
