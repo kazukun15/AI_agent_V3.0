@@ -150,9 +150,9 @@ def check_gemini_api_status():
 
 def check_tavily_api_status():
     url = "https://api.tavily.com/search"
-    # POST リクエストとしてパラメータを JSON 形式で送信
+    # "q" を "query" に変更
     payload = {
-        "q": "test",
+        "query": "test",
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
@@ -314,7 +314,7 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     payload = {
-        "q": query,
+        "query": query,  # "q" ではなく "query" を使用
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
@@ -574,4 +574,4 @@ if user_input:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 6))  # ランダムな遅延（3～6秒）
+                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
