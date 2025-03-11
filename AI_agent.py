@@ -136,7 +136,7 @@ st.sidebar.header("APIステータス")
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
-# Tavily API 用のキーを安全に取得（キー名は api_key に合わせる）
+# Tavily API 用のキーを取得（キー名は api_key です）
 tavily_api_key = st.secrets.get("tavily", {}).get("api_key", "")
 if not tavily_api_key:
     st.error("Tavily の API キーが設定されていません。secrets.toml を確認してください。")
@@ -161,6 +161,7 @@ def check_tavily_api_status():
         "no_html": 1,
         "skip_disambig": 1,
     }
+    # ここではX-API-Key ヘッダーを使用しています
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": tavily_api_key
