@@ -561,52 +561,50 @@ if user_input:
 # ------------------------------------------------------------------
 # 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
 # ------------------------------------------------------------------
-if st.session_state.get("quiz_active", False) is False and st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"]) is not None:
-    uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
-    if uploaded_image is not None:
-        image_bytes = uploaded_image.getvalue()
-        image_hash = hashlib.md5(image_bytes).hexdigest()
-        if st.session_state.last_uploaded_hash != image_hash:
-            st.session_state.last_uploaded_hash = image_hash
-            if image_hash in st.session_state.analyzed_images:
-                analysis_text = st.session_state.analyzed_images[image_hash]
-            else:
-                pil_img = Image.open(BytesIO(image_bytes))
-                label_text = analyze_image_with_vit(pil_img)  # ViTで解析
-                analysis_text = f"{label_text}"
-                st.session_state.analyzed_images[image_hash] = analysis_text
+if st.session_state.get("quiz_active", False) is False and uploaded_image is not None:
+    image_bytes = uploaded_image.getvalue()
+    image_hash = hashlib.md5(image_bytes).hexdigest()
+    if st.session_state.last_uploaded_hash != image_hash:
+        st.session_state.last_uploaded_hash = image_hash
+        if image_hash in st.session_state.analyzed_images:
+            analysis_text = st.session_state.analyzed_images[image_hash]
+        else:
+            pil_img = Image.open(BytesIO(image_bytes))
+            label_text = analyze_image_with_vit(pil_img)  # ViTで解析
+            analysis_text = f"{label_text}"
+            st.session_state.analyzed_images[image_hash] = analysis_text
 
-            st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
-            with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
-                st.markdown(
-                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
-                    unsafe_allow_html=True,
-                )
+        st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
+        with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+                unsafe_allow_html=True,
+            )
 
-            persona_params = adjust_parameters("image analysis", ai_age)
-            discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
-            for line in discussion_about_image.split("\n"):
-                line = line.strip()
-                if line:
-                    parts = line.split(":", 1)
-                    role = parts[0]
-                    content = parts[1].strip() if len(parts) > 1 else ""
-                    st.session_state.messages.append({"role": role, "content": content})
-                    display_name = user_name if role == "user" else role
-                    if role == "user":
-                        with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                            st.markdown(
-                                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                                unsafe_allow_html=True,
-                            )
-                    else:
-                        with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                            st.markdown(
-                                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                                unsafe_allow_html=True,
-                            )
-                    time.sleep(random.uniform(3, 8))
-                    
+        persona_params = adjust_parameters("image analysis", ai_age)
+        discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
+        for line in discussion_about_image.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state.messages.append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+
 # ------------------------------------------------------------------
 # チャット履歴の表示
 # ------------------------------------------------------------------
@@ -630,7 +628,7 @@ else:
     st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# APIステータスの表示
+# APIステータスの表示（サイドバー）
 # ------------------------------------------------------------------
 st.sidebar.header("APIステータス")
 if "gemini_status" in st.session_state:
