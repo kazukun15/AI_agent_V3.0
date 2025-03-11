@@ -150,14 +150,16 @@ def check_gemini_api_status():
 
 def check_tavily_api_status():
     url = "https://api.tavily.com/search"
-    params = {
+    # POST リクエストとしてパラメータを JSON 形式で送信
+    payload = {
         "q": "test",
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
+    headers = {"Content-Type": "application/json"}
     try:
-        response = requests.get(url, params=params)
+        response = requests.post(url, json=payload, headers=headers)
     except Exception as e:
         return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
     if response.status_code != 200:
@@ -311,14 +313,15 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
-    params = {
+    payload = {
         "q": query,
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
+    headers = {"Content-Type": "application/json"}
     try:
-        response = requests.get(url, params=params)
+        response = requests.post(url, json=payload, headers=headers)
         data = response.json()
         result = data.get("AbstractText", "")
         return result
@@ -571,4 +574,4 @@ if user_input:
                             f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+                time.sleep(random.uniform(3, 6))  # ランダムな遅延（3～6秒）
