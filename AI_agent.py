@@ -16,7 +16,8 @@ import torch
 from transformers import AutoFeatureExtractor, ViTForImageClassification
 # ▲
 
-from streamlit_chat import message  # streamlit-chat のメッセージ表示用関数
+# streamlit-chat のメッセージ表示用関数（必要な場合のみ利用）
+from streamlit_chat import message
 
 # ------------------------------------------------------------------
 # st.set_page_config() は最初に呼び出す
@@ -118,20 +119,20 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
-# ファイルアップローダーの重複生成を防ぐためのフラグ管理とユニークキーを利用
+# ファイルアップローダーの重複生成を防ぐため、セッション変数とユニークキーを利用
 if "file_uploader_created" not in st.session_state:
     st.session_state.file_uploader_created = False
 uploaded_image = None
-if st.session_state.get("quiz_active", False) is False and not st.session_state.file_uploader_created:
+if not st.session_state.get("quiz_active", False) and not st.session_state.file_uploader_created:
     uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
     if uploaded_image is not None:
         st.session_state.file_uploader_created = True
-if st.session_state.get("quiz_active", False) is False and uploaded_image is None:
-    # 別のユニークキーで呼び出し
+if not st.session_state.get("quiz_active", False) and uploaded_image is None:
+    # 別のユニークキーを指定
     uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="unique_file_uploader_key")
 
-# インターネット検索利用のON/OFF（ユニークなキーを設定）
-use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox")
+# インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
+use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
 # ------------------------------------------------------------------
@@ -145,7 +146,7 @@ MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
-# 新キャラクターはセッションに保存（1回だけ生成）
+# 新キャラクターはセッションに一度だけ生成（固定化）
 if "new_char" not in st.session_state:
     def generate_new_character():
         """サイドバーで入力があればそれを使い、なければランダム"""
@@ -213,10 +214,9 @@ avatar_img_dict = {
 # ------------------------------------------------------------------
 # Gemini API 呼び出し関数（requests 使用）＋ステータス表示
 # ------------------------------------------------------------------
-def remove_json_artifacts(text: str) -> str:
+def remove_json_artifacts(text: str, pattern: str = r"'parts': \[\{'text':.*?\}\], 'role': 'model'") -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
-    pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
@@ -533,8 +533,8 @@ for msg in st.session_state.messages:
 # ------------------------------------------------------------------
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # インターネット検索利用（tavily API）
-    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox") else ""
+    # インターネット検索利用（tavily API） ※チェックボックスにユニークキーを指定
+    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1") else ""
     
     if st.session_state.get("quiz_active", False):
         if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
@@ -593,7 +593,7 @@ if user_input:
 # ------------------------------------------------------------------
 # 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
 # ------------------------------------------------------------------
-if st.session_state.get("quiz_active", False) is False and uploaded_image is not None:
+if not st.session_state.get("quiz_active", False) and uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
     if st.session_state.last_uploaded_hash != image_hash:
