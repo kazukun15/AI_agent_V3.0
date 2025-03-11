@@ -150,6 +150,7 @@ def check_gemini_api_status():
 
 def check_tavily_api_status():
     url = "https://api.tavily.com/search"
+    # "query" キーを使用し、Authorization ヘッダーに Tavily 用 API キーを追加
     payload = {
         "query": "test",
         "format": "json",
@@ -158,8 +159,7 @@ def check_tavily_api_status():
     }
     headers = {
         "Content-Type": "application/json",
-        # secrets.toml で token キーに合わせ、X-API-Key ヘッダーで送信
-        "X-API-Key": st.secrets["tavily"]["token"]
+        "Authorization": f"Bearer {st.secrets['tavily']['api_key']}"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -317,14 +317,14 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     payload = {
-        "query": query,  # "query" キーを使用
+        "query": query,  # "q" ではなく "query" を使用
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
     }
     headers = {
         "Content-Type": "application/json",
-        "X-API-Key": st.secrets["tavily"]["token"]
+        "Authorization": f"Bearer {st.secrets['tavily']['api_key']}"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
