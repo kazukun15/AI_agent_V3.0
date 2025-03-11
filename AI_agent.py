@@ -11,7 +11,7 @@ from PIL import Image
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-# ▼ 画像解析用に追加（ViTモデル）
+# ▼ 画像解析用（ViTモデル）
 import torch
 from transformers import AutoFeatureExtractor, ViTForImageClassification
 # ▲
@@ -22,7 +22,7 @@ from streamlit_chat import message  # streamlit-chat のメッセージ表示用
 # st.set_page_config() は最初に呼び出す
 # ------------------------------------------------------------------
 st.set_page_config(page_title="ぼくのともだち", layout="wide")
-st.title("ぼくのともだち V3.0 +")
+st.title("ぼくのともだち V3.0 + 画像解析＆検索")
 
 # ------------------------------------------------------------------
 # config.toml の読み込み（テーマ設定）
@@ -48,7 +48,7 @@ except Exception:
     font = "monospace"
 
 # ------------------------------------------------------------------
-# 背景・共通スタイルの設定
+# 背景・共通スタイルの設定（テーマ設定を反映）
 # ------------------------------------------------------------------
 st.markdown(
     f"""
@@ -67,6 +67,7 @@ st.markdown(
         margin-bottom: 20px;
         background-color: {secondaryBackgroundColor};
     }}
+    /* バブルチャット用のスタイル */
     .chat-bubble {{
         background-color: #d4f7dc;
         border-radius: 10px;
@@ -88,13 +89,14 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# ユーザーの名前・AIの年齢入力
+# ユーザーの名前入力＆AIの年齢入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
+# AIの年齢は10代から選べるように、min_valueを10に設定
+ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
-# サイドバー：カスタム新キャラクター設定＆クイズ機能
+# サイドバー：カスタム新キャラクター設定、クイズ、画像アップロード、検索利用
 # ------------------------------------------------------------------
 st.sidebar.header("カスタム新キャラクター設定")
 custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
@@ -116,87 +118,30 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
         st.session_state.messages = []
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
-# ------------------------------------------------------------------
-# サイドバー：画像解析用アップロード
-# ------------------------------------------------------------------
 st.sidebar.header("画像解析")
-uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"])
+uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
+
+# インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
+use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
+st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
 # ------------------------------------------------------------------
-# サイドバー：インターネット検索利用のON/OFF
-# ------------------------------------------------------------------
-use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
-
-# ------------------------------------------------------------------
-# サイドバー：APIステータスの常時表示
-# ------------------------------------------------------------------
-st.sidebar.header("APIステータス")
-
-# APIキー、モデル設定（Gemini API用）
-API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
-
-# Tavily API 用のキーを取得（キー名は api_key です）
-tavily_api_key = st.secrets.get("tavily", {}).get("api_key", "")
-if not tavily_api_key:
-    st.error("Tavily の API キーが設定されていません。secrets.toml を確認してください。")
-
-def check_gemini_api_status():
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
-    payload = {"contents": [{"parts": [{"text": "ステータスチェック"}]}]}
-    headers = {"Content-Type": "application/json"}
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
-    if response.status_code != 200:
-        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
-    return "OK"
-
-def check_tavily_api_status():
-    url = "https://api.tavily.com/search"
-    payload = {
-        "query": "test",
-        "format": "json",
-        "no_html": 1,
-        "skip_disambig": 1,
-    }
-    # ここではX-API-Key ヘッダーを使用しています
-    headers = {
-        "Content-Type": "application/json",
-        "X-API-Key": tavily_api_key
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
-    if response.status_code != 200:
-        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
-    return "OK"
-
-gemini_status = check_gemini_api_status()
-tavily_status = check_tavily_api_status()
-st.sidebar.write("Gemini API:", gemini_status)
-st.sidebar.write("Tavily API:", tavily_status)
-
-# ------------------------------------------------------------------
-# キャラクター定義
+# キャラクター定義（固定メンバー）
 # ------------------------------------------------------------------
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
 SHINYA_NAME = "しんや"
 MINORU_NAME = "みのる"
-NEW_CHAR_NAME = "新キャラクター"  # 表示用のキー
+NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
-# ------------------------------------------------------------------
-# 新キャラクター情報の初期化（アプリ起動時に一度だけ生成）
-# ------------------------------------------------------------------
+# 新キャラクターはセッションに一度だけ生成（固定化）
 if "new_char" not in st.session_state:
-    if custom_new_char_name.strip() and custom_new_char_personality.strip():
-        st.session_state.new_char = (custom_new_char_name.strip(), custom_new_char_personality.strip())
-    else:
+    def generate_new_character():
+        """サイドバーで入力があればそれを使い、なければランダム"""
+        if custom_new_char_name.strip() and custom_new_char_personality.strip():
+            return custom_new_char_name.strip(), custom_new_char_personality.strip()
         candidates = [
             ("たけし", "冷静沈着で皮肉屋、どこか孤高な存在"),
             ("さとる", "率直かつ辛辣で、常に現実を鋭く指摘する"),
@@ -204,10 +149,18 @@ if "new_char" not in st.session_state:
             ("けんじ", "クールで合理的、論理に基づいた意見を率直に述べる"),
             ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
         ]
-        st.session_state.new_char = random.choice(candidates)
+        return random.choice(candidates)
+    st.session_state.new_char = generate_new_character()
+new_name, new_personality = st.session_state.new_char
 
 # ------------------------------------------------------------------
-# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ
+# APIキー、モデル設定（Gemini API）
+# ------------------------------------------------------------------
+API_KEY = st.secrets["general"]["api_key"]
+MODEL_NAME = "gemini-2.0-flash-001"
+
+# ------------------------------------------------------------------
+# セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ、APIステータス
 # ------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -217,11 +170,13 @@ if "last_uploaded_hash" not in st.session_state:
     st.session_state.last_uploaded_hash = None
 if "search_cache" not in st.session_state:
     st.session_state.search_cache = {}
-if "internet_disabled" not in st.session_state:
-    st.session_state["internet_disabled"] = False
+if "gemini_status" not in st.session_state:
+    st.session_state.gemini_status = ""
+if "tavily_status" not in st.session_state:
+    st.session_state.tavily_status = ""
 
 # ------------------------------------------------------------------
-# アバター画像の読み込み
+# アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 avatar_dir = os.path.join(BASE_DIR, "avatars")
@@ -240,19 +195,18 @@ avatar_img_dict = {
     YUKARI_NAME: img_yukari,
     SHINYA_NAME: img_shinya,
     MINORU_NAME: img_minoru,
-    NEW_CHAR_NAME: img_newchar,  # 新キャラクターの画像は固定
+    NEW_CHAR_NAME: img_newchar,
     ASSISTANT_NAME: "🤖",
     "クイズ": "❓",
     "画像解析": "🖼️",
 }
 
 # ------------------------------------------------------------------
-# Gemini API 呼び出し関数
+# Gemini API 呼び出し関数（requests 使用）＋ステータス表示
 # ------------------------------------------------------------------
-def remove_json_artifacts(text: str) -> str:
+def remove_json_artifacts(text: str, pattern: str = r"'parts': \[\{'text':.*?\}\], 'role': 'model'") -> str:
     if not isinstance(text, str):
         text = str(text) if text else ""
-    pattern = r"'parts': \[\{'text':.*?\}\], 'role': 'model'"
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     return cleaned.strip()
 
@@ -262,14 +216,18 @@ def call_gemini_api(prompt: str) -> str:
     headers = {"Content-Type": "application/json"}
     try:
         response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            st.session_state.gemini_status = "Gemini API: OK"
+        else:
+            st.session_state.gemini_status = f"Gemini API Error {response.status_code}: {response.text}"
     except Exception as e:
+        st.session_state.gemini_status = f"Gemini API Exception: {str(e)}"
         return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
-    if response.status_code != 200:
-        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
     try:
         rjson = response.json()
         candidates = rjson.get("candidates", [])
         if not candidates:
+            st.session_state.gemini_status = "Gemini API Error: candidatesが空"
             return "回答が見つかりませんでした。(candidatesが空)"
         candidate0 = candidates[0]
         content_val = candidate0.get("content", "")
@@ -280,9 +238,12 @@ def call_gemini_api(prompt: str) -> str:
             content_str = str(content_val)
         content_str = content_str.strip()
         if not content_str:
+            st.session_state.gemini_status = "Gemini API Error: contentが空"
             return "回答が見つかりませんでした。(contentが空)"
+        st.session_state.gemini_status = "Gemini API: OK"
         return remove_json_artifacts(content_str)
     except Exception as e:
+        st.session_state.gemini_status = f"Gemini API 応答解析エラー: {str(e)}"
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
 # ------------------------------------------------------------------
@@ -299,7 +260,7 @@ def load_image_classification_model():
 extractor, vit_model = load_image_classification_model()
 
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
-    """ViTで画像分類を行い、上位3クラスを文字列化。RGB変換済み"""
+    """ViTで画像分類を行い、上位3クラスを文字列化（RGB変換済み）"""
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
     inputs = extractor(pil_image, return_tensors="pt")
@@ -318,160 +279,108 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     return ", ".join(result_str)
 
 # ------------------------------------------------------------------
-# インターネット検索結果取得（Tavily API利用＋キャッシュ＆非同期処理）
+# インターネット検索実行（tavily API利用＋キャッシュ＆非同期処理）
 # ------------------------------------------------------------------
+from concurrent.futures import ThreadPoolExecutor
+
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
-    payload = {
-        "query": query,
-        "format": "json",
-        "no_html": 1,
-        "skip_disambig": 1,
-    }
+    token = st.secrets["tavily"]["token"]
     headers = {
-        "Content-Type": "application/json",
-        "X-API-Key": tavily_api_key
+         "Authorization": f"Bearer {token}",
+         "Content-Type": "application/json"
+    }
+    payload = {
+         "query": query,
+         "topic": "general",
+         "search_depth": "basic",
+         "max_results": 1,
+         "time_range": None,
+         "days": 3,
+         "include_answer": True,
+         "include_raw_content": False,
+         "include_images": False,
+         "include_image_descriptions": False,
+         "include_domains": [],
+         "exclude_domains": []
     }
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code == 503:
-            return "__SERVICE_UNAVAILABLE__"
-        elif response.status_code != 200:
-            return ""
-        data = response.json()
-        result = data.get("AbstractText", "")
-        return result
+         response = requests.post(url, headers=headers, json=payload)
+         if response.status_code == 200:
+             st.session_state.tavily_status = "tavily API: OK"
+         else:
+             st.session_state.tavily_status = f"tavily API Error {response.status_code}: {response.text}"
+         data = response.json()
+         result = data.get("answer", "")
+         return result
     except Exception as e:
-        return ""
+         st.session_state.tavily_status = f"tavily API Exception: {str(e)}"
+         return ""
 
 executor = ThreadPoolExecutor(max_workers=1)
+
 def async_get_search_info(query: str) -> str:
-    if st.session_state.get("internet_disabled", False):
-        return ""
     with st.spinner("最新情報を検索中…"):
         future = executor.submit(cached_get_search_info, query)
-        result = future.result()
-        if result == "__SERVICE_UNAVAILABLE__":
-            st.session_state["internet_disabled"] = True
-            return ""
-        return result
+        return future.result()
 
 # ------------------------------------------------------------------
-# 会話生成関連の関数
+# クラス定義：各エージェント（キャラクター）ごとに応答生成を行う
 # ------------------------------------------------------------------
-def analyze_question(question: str) -> int:
-    score = 0
-    keywords_emotional = ["困った", "悩み", "苦しい", "辛い"]
-    keywords_logical = ["理由", "原因", "仕組み", "方法"]
-    for word in keywords_emotional:
-        if re.search(word, question):
-            score += 1
-    for word in keywords_logical:
-        if re.search(word, question):
-            score -= 1
-    return score
+class ChatAgent:
+    def __init__(self, name, style, detail):
+        self.name = name
+        self.style = style
+        self.detail = detail
 
-def adjust_parameters(question: str, ai_age: int) -> dict:
-    score = analyze_question(question)
-    params = {}
-    if ai_age < 30:
-        params[YUKARI_NAME] = {"style": "明るくはっちゃけた", "detail": "とにかくエネルギッシュでポジティブな回答"}
-        if score > 0:
-            params[SHINYA_NAME] = {"style": "共感的", "detail": "若々しい感性で共感しながら答える"}
-            params[MINORU_NAME] = {"style": "柔軟", "detail": "自由な発想で斬新な視点から回答する"}
-        else:
-            params[SHINYA_NAME] = {"style": "分析的", "detail": "新しい視点を持ちつつ、若々しく冷静に答える"}
-            params[MINORU_NAME] = {"style": "客観的", "detail": "柔軟な思考で率直に事実を述べる"}
-    elif ai_age < 50:
-        params[YUKARI_NAME] = {"style": "温かく落ち着いた", "detail": "経験に基づいたバランスの取れた回答"}
-        if score > 0:
-            params[SHINYA_NAME] = {"style": "共感的", "detail": "深い理解と共感を込めた回答"}
-            params[MINORU_NAME] = {"style": "柔軟", "detail": "実務的な視点から多角的な意見を提供"}
-        else:
-            params[SHINYA_NAME] = {"style": "分析的", "detail": "冷静な視点から根拠をもって説明する"}
-            params[MINORU_NAME] = {"style": "客観的", "detail": "理論的かつ中立的な視点で回答する"}
-    else:
-        params[YUKARI_NAME] = {"style": "賢明で穏やかな", "detail": "豊富な経験と知識に基づいた落ち着いた回答"}
-        if score > 0:
-            params[SHINYA_NAME] = {"style": "共感的", "detail": "深い洞察と共感で優しく答える"}
-            params[MINORU_NAME] = {"style": "柔軟", "detail": "多面的な知見から慎重に意見を述べる"}
-        else:
-            params[SHINYA_NAME] = {"style": "分析的", "detail": "豊かな経験に基づいた緻密な説明"}
-            params[MINORU_NAME] = {"style": "客観的", "detail": "慎重かつ冷静に事実を丁寧に伝える"}
-    return params
+    def generate_response(self, question: str, ai_age: int, search_info: str = "") -> str:
+        current_user = st.session_state.get("user_name", "ユーザー")
+        prompt = f"【{current_user}さんの質問】\n{question}\n\n"
+        if search_info:
+            prompt += f"最新の情報によると、{search_info}という報告があります。\n"
+        prompt += f"このAIは{ai_age}歳として振る舞います。\n"
+        prompt += f"{self.name}は【{self.style}な視点】で、{self.detail}。\n"
+        prompt += "あなたの回答のみを出力してください。"
+        response = call_gemini_api(prompt)
+        return response
 
-def generate_discussion(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
-    current_user = st.session_state.get("user_name", "ユーザー")
-    new_name, new_personality = st.session_state.new_char
-    prompt = f"【{current_user}さんの質問】\n{question}\n\n"
-    if search_info:
-        prompt += f"最新の情報によると、{search_info}という報告があります。\n"
-    prompt += f"このAIは{ai_age}歳として振る舞います。\n"
+# ------------------------------------------------------------------
+# 並列実行用：エージェントごとの応答生成（並列化で高速化）
+# ------------------------------------------------------------------
+def generate_discussion_parallel(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
+    agents = []
     for name, params in persona_params.items():
-        prompt += f"{name}は【{params['style']}な視点】で、{params['detail']}。\n"
-    prompt += f"さらに、新キャラクターとして {new_name} は【{new_personality}】な性格です。彼/彼女も会話に加わってください。\n"
-    prompt += (
-        "\n※ユーザーの発言は記録されますが、他のキャラクターはユーザーの発言を引用せず、自分の意見だけで回答してください。\n"
-        "上記情報を元に、4人が友達同士のように自然な会話をしてください。\n"
-        "出力形式は以下の通りです。\n"
-        f"ゆかり: 発言内容\n"
-        f"しんや: 発言内容\n"
-        f"みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
-        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
-    )
-    return call_gemini_api(prompt)
+        agents.append(ChatAgent(name, params["style"], params["detail"]))
+    new_agent = ChatAgent(new_name, new_personality, "")
+    agents.append(new_agent)
+    responses = {}
+    with ThreadPoolExecutor(max_workers=len(agents)) as executor:
+        future_to_agent = {executor.submit(agent.generate_response, question, ai_age, search_info): agent for agent in agents}
+        for future in future_to_agent:
+            agent = future_to_agent[future]
+            responses[agent.name] = future.result()
+    conversation = "\n".join([f"{agent.name}: {responses[agent.name]}" for agent in agents])
+    return conversation
 
-def continue_discussion(additional_input: str, current_discussion: str, search_info: str = "") -> str:
-    current_user = st.session_state.get("user_name", "ユーザー")
-    new_name, _ = st.session_state.new_char
-    prompt = (
-        "これまでの会話:\n" + current_discussion + "\n\n" +
-        "ユーザーの追加発言: " + additional_input + "\n\n"
-    )
-    if search_info:
-        prompt += f"最新の情報によると、{search_info}という報告もあります。\n"
-    prompt += (
-        "\n※ユーザーの発言は記録されますが、他のキャラクターはユーザーの発言を引用せず、自分の意見だけで回答してください。\n"
-        "上記を踏まえ、4人がさらに自然な会話を続けてください。\n"
-        "出力形式は以下の通りです。\n"
-        "ゆかり: 発言内容\n"
-        "しんや: 発言内容\n"
-        "みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
-        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
-    )
-    return call_gemini_api(prompt)
-
-def discuss_image_analysis(analysis_text: str, persona_params: dict, ai_age: int) -> str:
-    current_user = st.session_state.get("user_name", "ユーザー")
-    new_name, new_personality = st.session_state.new_char
-    prompt = (
-        f"【{current_user}さんが画像をアップロードしました】\n"
-        f"画像の推定結果: {analysis_text}\n\n"
-        "この画像に関連しそうな話題について、4人の友達（ゆかり、しんや、みのる、"
-        f"{new_name}）が気軽に雑談を始めてください。\n"
-        "画像そのものの詳細な分析ではなく、画像を見たときの印象や連想されるエピソードを自由に話してください。\n"
-        "出力形式は以下の通りです。\n"
-        f"ゆかり: 発言内容\n"
-        f"しんや: 発言内容\n"
-        f"みのる: 発言内容\n"
-        f"{new_name}: 発言内容\n"
-        "余計なJSON形式は入れず、自然な日本語の会話のみを出力してください。"
-    )
-    return call_gemini_api(prompt)
-
-def generate_summary(discussion: str) -> str:
-    prompt = (
-        "以下は4人の会話内容です。\n" + discussion + "\n\n" +
-        "この会話を踏まえて、質問に対するまとめ回答を生成してください。\n"
-        "自然な日本語文で出力し、余計なJSON形式は不要です。"
-    )
-    return call_gemini_api(prompt)
+def continue_discussion_parallel(additional_input: str, history: str, ai_age: int, search_info: str = "") -> str:
+    persona_params = adjust_parameters(additional_input, ai_age)
+    agents = []
+    for name, params in persona_params.items():
+        agents.append(ChatAgent(name, params["style"], params["detail"]))
+    new_agent = ChatAgent(new_name, new_personality, "")
+    agents.append(new_agent)
+    responses = {}
+    with ThreadPoolExecutor(max_workers=len(agents)) as executor:
+        future_to_agent = {executor.submit(agent.generate_response, additional_input, ai_age, search_info): agent for agent in agents}
+        for future in future_to_agent:
+            agent = future_to_agent[future]
+            responses[agent.name] = future.result()
+    conversation = "\n".join([f"{agent.name}: {responses[agent.name]}" for agent in agents])
+    return conversation
 
 # ------------------------------------------------------------------
-# 既存のチャットメッセージを表示
+# 既存のチャットメッセージを表示（st.chat_input 形式）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
     role = msg["role"]
@@ -491,9 +400,71 @@ for msg in st.session_state.messages:
             )
 
 # ------------------------------------------------------------------
+# ユーザー入力の取得（st.chat_input）
+# ------------------------------------------------------------------
+user_input = st.chat_input("何か質問や話したいことがありますか？")
+if user_input:
+    # インターネット検索利用（tavily API） ※チェックボックスにユニークキーを指定
+    search_info = async_get_search_info(user_input) if st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1") else ""
+    
+    if st.session_state.get("quiz_active", False):
+        if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
+            quiz_result = "正解です！おめでとうございます！"
+        else:
+            quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
+        st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
+        with st.chat_message("クイズ", avatar=avatar_img_dict["クイズ"]):
+            st.markdown(
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
+                unsafe_allow_html=True,
+            )
+        st.session_state.quiz_active = False
+    else:
+        with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+            st.markdown(
+                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
+                unsafe_allow_html=True,
+            )
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        
+        # AI応答生成（並列処理を利用）
+        if len(st.session_state.messages) == 1:
+            persona_params = adjust_parameters(user_input, ai_age)
+            discussion = generate_discussion_parallel(user_input, persona_params, ai_age, search_info=search_info)
+        else:
+            history = "\n".join(
+                f'{msg["role"]}: {msg["content"]}'
+                for msg in st.session_state.messages
+                if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
+            )
+            discussion = continue_discussion_parallel(user_input, history, ai_age, search_info=search_info)
+        
+        for line in discussion.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state.messages.append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+
+# ------------------------------------------------------------------
 # 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
 # ------------------------------------------------------------------
-if uploaded_image is not None:
+if not st.session_state.get("quiz_active", False) and uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
     if st.session_state.last_uploaded_hash != image_hash:
@@ -502,19 +473,17 @@ if uploaded_image is not None:
             analysis_text = st.session_state.analyzed_images[image_hash]
         else:
             pil_img = Image.open(BytesIO(image_bytes))
-            label_text = analyze_image_with_vit(pil_img)  # ViTで解析（RGB変換済み）
+            label_text = analyze_image_with_vit(pil_img)  # ViTで解析
             analysis_text = f"{label_text}"
             st.session_state.analyzed_images[image_hash] = analysis_text
 
-        # (A) 解析結果をチャットログへ追加＆表示
         st.session_state.messages.append({"role": "画像解析", "content": analysis_text})
-        with st.chat_message("画像解析", avatar=avatar_img_dict["画像解析"]):
+        with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
                 unsafe_allow_html=True,
             )
 
-        # (B) 画像に関連する話題を友達が始める
         persona_params = adjust_parameters("image analysis", ai_age)
         discussion_about_image = discuss_image_analysis(analysis_text, persona_params, ai_age)
         for line in discussion_about_image.split("\n"):
@@ -540,60 +509,30 @@ if uploaded_image is not None:
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
 
 # ------------------------------------------------------------------
-# テキスト入力（st.chat_input）による通常会話
+# チャット履歴の表示
 # ------------------------------------------------------------------
-user_input = st.chat_input("何か質問や話したいことがありますか？")
-if user_input:
-    # インターネット検索を利用する場合は、キャッシュ＆非同期処理で結果を取得
-    search_info = async_get_search_info(user_input) if use_internet else ""
-    
-    if st.session_state.get("quiz_active", False):
-        if user_input.strip().lower() == st.session_state.quiz_answer.strip().lower():
-            quiz_result = "正解です！おめでとうございます！"
+st.header("会話履歴")
+if st.session_state.messages:
+    for msg in reversed(st.session_state.messages):
+        display_name = user_name if msg["role"] == "user" else msg["role"]
+        if msg["role"] == "user":
+            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+                st.markdown(
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
         else:
-            quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
-        st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
-        with st.chat_message("クイズ", avatar=avatar_img_dict["クイズ"]):
-            st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
-                unsafe_allow_html=True,
-            )
-        st.session_state.quiz_active = False
-    else:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-            st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
-                unsafe_allow_html=True,
-            )
-        if len(st.session_state.messages) == 1:
-            persona_params = adjust_parameters(user_input, ai_age)
-            discussion = generate_discussion(user_input, persona_params, ai_age, search_info=search_info)
-        else:
-            history = "\n".join(
-                f'{msg["role"]}: {msg["content"]}'
-                for msg in st.session_state.messages
-                if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
-            )
-            discussion = continue_discussion(user_input, history, search_info=search_info)
-        for line in discussion.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                role = parts[0]
-                content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state.messages.append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
-                if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
-                        st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                        st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                time.sleep(random.uniform(3, 7))  # ランダムな遅延（3～7秒）
+            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
+                st.markdown(
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+else:
+    st.markdown("<p style='color: gray;'>ここに会話が表示されます。</p>", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------
+# APIステータスの表示（サイドバー）
+# ------------------------------------------------------------------
+st.sidebar.header("APIステータス")
+st.sidebar.write("【Gemini API】", st.session_state.gemini_status)
+st.sidebar.write("【tavily API】", st.session_state.tavily_status)
