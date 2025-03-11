@@ -92,7 +92,7 @@ st.markdown(
 # ユーザーの名前入力＆AIの年齢入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-# AIの年齢は10代から選択できるように、最小値を10に設定
+# AIの年齢は10代以上から選択できるように、min_value=10 に設定
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
@@ -119,10 +119,10 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
-# 画像アップロードは1つだけ表示（キーは "file_uploader_key"）
+# 画像アップローダーは1つだけ表示（キーは "file_uploader_key"）
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
 
-# インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
+# インターネット検索利用のON/OFF（チェックボックスにユニークキーを指定）
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
 st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメニューからサイドバーにアクセスできます。")
 
@@ -414,7 +414,7 @@ if user_input:
         else:
             quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
         st.session_state.messages.append({"role": "クイズ", "content": quiz_result})
-        with st.chat_message("クイズ", avatar=avatar_img_dict["クイズ"]):
+        with st.chat_message("クイズ", avatar=avatar_img_dict.get("クイズ", "❓")):
             st.markdown(
                 f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
                 unsafe_allow_html=True,
