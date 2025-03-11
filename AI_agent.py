@@ -128,9 +128,14 @@ uploaded_image = st.sidebar.file_uploader("画像をアップロードしてく�
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True)
 
 # ------------------------------------------------------------------
-# サイドバー：APIステータス確認
+# サイドバー：APIステータスの常時表示
 # ------------------------------------------------------------------
-st.sidebar.header("APIステータス確認")
+st.sidebar.header("APIステータス")
+
+# APIキー、モデル設定（Gemini API用）
+API_KEY = st.secrets["general"]["api_key"]
+MODEL_NAME = "gemini-2.0-flash-001"
+
 def check_gemini_api_status():
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
     payload = {"contents": [{"parts": [{"text": "ステータスチェック"}]}]}
@@ -159,11 +164,10 @@ def check_tavily_api_status():
         return f"エラー: ステータスコード {response.status_code} -> {response.text}"
     return "OK"
 
-if st.sidebar.button("APIステータス確認"):
-    gemini_status = check_gemini_api_status()
-    tavily_status = check_tavily_api_status()
-    st.sidebar.write("Gemini API: ", gemini_status)
-    st.sidebar.write("Tavily API: ", tavily_status)
+gemini_status = check_gemini_api_status()
+tavily_status = check_tavily_api_status()
+st.sidebar.write("Gemini API:", gemini_status)
+st.sidebar.write("Tavily API:", tavily_status)
 
 # ------------------------------------------------------------------
 # キャラクター定義
@@ -191,12 +195,6 @@ if "new_char" not in st.session_state:
             ("なおみ", "独創的で個性的、常識にとらわれず新たな視点を提供する")
         ]
         st.session_state.new_char = random.choice(candidates)
-
-# ------------------------------------------------------------------
-# APIキー、モデル設定（Gemini API）
-# ------------------------------------------------------------------
-API_KEY = st.secrets["general"]["api_key"]
-MODEL_NAME = "gemini-2.0-flash-001"
 
 # ------------------------------------------------------------------
 # セッション初期化：チャット履歴、画像解析キャッシュ、最後の画像ハッシュ、検索結果キャッシュ
