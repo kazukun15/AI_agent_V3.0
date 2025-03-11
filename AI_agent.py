@@ -148,12 +148,10 @@ def check_gemini_api_status():
         return f"エラー: ステータスコード {response.status_code} -> {response.text}"
     return "OK"
 
-# cached_get_search_info はキャッシュを活用し、503（Service Unavailable）なら特定の値を返す
-@st.cache_data(show_spinner=False)
-def cached_get_search_info(query: str) -> str:
+def check_tavily_api_status():
     url = "https://api.tavily.com/search"
     payload = {
-        "query": query,
+        "query": "test",
         "format": "json",
         "no_html": 1,
         "skip_disambig": 1,
@@ -164,28 +162,11 @@ def cached_get_search_info(query: str) -> str:
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
-        if response.status_code == 503:
-            return "__SERVICE_UNAVAILABLE__"
-        elif response.status_code != 200:
-            return ""
-        data = response.json()
-        result = data.get("AbstractText", "")
-        return result
     except Exception as e:
-        return ""
-
-# async_get_search_info では、キャッシュ結果を取得し、503時は内部でインターネット検索を無効化
-executor = ThreadPoolExecutor(max_workers=1)
-def async_get_search_info(query: str) -> str:
-    if st.session_state.get("internet_disabled", False):
-        return ""
-    with st.spinner("最新情報を検索中…"):
-        future = executor.submit(cached_get_search_info, query)
-        result = future.result()
-        if result == "__SERVICE_UNAVAILABLE__":
-            st.session_state["internet_disabled"] = True
-            return ""
-        return result
+        return f"エラー: リクエスト送信時に例外が発生しました -> {str(e)}"
+    if response.status_code != 200:
+        return f"エラー: ステータスコード {response.status_code} -> {response.text}"
+    return "OK"
 
 gemini_status = check_gemini_api_status()
 tavily_status = check_tavily_api_status()
@@ -230,6 +211,8 @@ if "last_uploaded_hash" not in st.session_state:
     st.session_state.last_uploaded_hash = None
 if "search_cache" not in st.session_state:
     st.session_state.search_cache = {}
+if "internet_disabled" not in st.session_state:
+    st.session_state["internet_disabled"] = False
 
 # ------------------------------------------------------------------
 # アバター画像の読み込み
