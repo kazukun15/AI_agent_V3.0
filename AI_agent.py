@@ -92,8 +92,7 @@ st.markdown(
 # ユーザーの名前入力＆AIの年齢入力（上部）
 # ------------------------------------------------------------------
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
-# AIの年齢は10代から選べるように、min_valueを10に設定
-ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
+ai_age = st.number_input("AIの年齢を指定してください", min_value=1, value=30, step=1, key="ai_age")
 
 # ------------------------------------------------------------------
 # サイドバー：カスタム新キャラクター設定、クイズ、画像アップロード、検索利用
@@ -119,6 +118,7 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state.messages.append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
+# ファイルアップローダーは1つのみ（重複しないようにユニークキーを指定）
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
 
 # インターネット検索利用のON/OFF（チェックボックスにユニークなキーを指定）
@@ -326,60 +326,6 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # ------------------------------------------------------------------
-# クラス定義：各エージェント（キャラクター）ごとに応答生成を行う
-# ------------------------------------------------------------------
-class ChatAgent:
-    def __init__(self, name, style, detail):
-        self.name = name
-        self.style = style
-        self.detail = detail
-
-    def generate_response(self, question: str, ai_age: int, search_info: str = "") -> str:
-        current_user = st.session_state.get("user_name", "ユーザー")
-        prompt = f"【{current_user}さんの質問】\n{question}\n\n"
-        if search_info:
-            prompt += f"最新の情報によると、{search_info}という報告があります。\n"
-        prompt += f"このAIは{ai_age}歳として振る舞います。\n"
-        prompt += f"{self.name}は【{self.style}な視点】で、{self.detail}。\n"
-        prompt += "あなたの回答のみを出力してください。"
-        response = call_gemini_api(prompt)
-        return response
-
-# ------------------------------------------------------------------
-# 並列実行用：エージェントごとの応答生成（並列化で高速化）
-# ------------------------------------------------------------------
-def generate_discussion_parallel(question: str, persona_params: dict, ai_age: int, search_info: str = "") -> str:
-    agents = []
-    for name, params in persona_params.items():
-        agents.append(ChatAgent(name, params["style"], params["detail"]))
-    new_agent = ChatAgent(new_name, new_personality, "")
-    agents.append(new_agent)
-    responses = {}
-    with ThreadPoolExecutor(max_workers=len(agents)) as executor:
-        future_to_agent = {executor.submit(agent.generate_response, question, ai_age, search_info): agent for agent in agents}
-        for future in future_to_agent:
-            agent = future_to_agent[future]
-            responses[agent.name] = future.result()
-    conversation = "\n".join([f"{agent.name}: {responses[agent.name]}" for agent in agents])
-    return conversation
-
-def continue_discussion_parallel(additional_input: str, history: str, ai_age: int, search_info: str = "") -> str:
-    persona_params = adjust_parameters(additional_input, ai_age)
-    agents = []
-    for name, params in persona_params.items():
-        agents.append(ChatAgent(name, params["style"], params["detail"]))
-    new_agent = ChatAgent(new_name, new_personality, "")
-    agents.append(new_agent)
-    responses = {}
-    with ThreadPoolExecutor(max_workers=len(agents)) as executor:
-        future_to_agent = {executor.submit(agent.generate_response, additional_input, ai_age, search_info): agent for agent in agents}
-        for future in future_to_agent:
-            agent = future_to_agent[future]
-            responses[agent.name] = future.result()
-    conversation = "\n".join([f"{agent.name}: {responses[agent.name]}" for agent in agents])
-    return conversation
-
-# ------------------------------------------------------------------
 # 既存のチャットメッセージを表示（st.chat_input 形式）
 # ------------------------------------------------------------------
 for msg in st.session_state.messages:
@@ -427,17 +373,17 @@ if user_input:
             )
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # AI応答生成（並列処理を利用）
+        # AI応答生成
         if len(st.session_state.messages) == 1:
             persona_params = adjust_parameters(user_input, ai_age)
-            discussion = generate_discussion_parallel(user_input, persona_params, ai_age, search_info=search_info)
+            discussion = generate_discussion(user_input, persona_params, ai_age, search_info=search_info)
         else:
             history = "\n".join(
                 f'{msg["role"]}: {msg["content"]}'
                 for msg in st.session_state.messages
                 if msg["role"] in NAMES or msg["role"] == NEW_CHAR_NAME
             )
-            discussion = continue_discussion_parallel(user_input, history, ai_age, search_info=search_info)
+            discussion = continue_discussion(user_input, history, search_info=search_info)
         
         for line in discussion.split("\n"):
             line = line.strip()
