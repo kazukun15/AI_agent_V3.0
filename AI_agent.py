@@ -287,7 +287,7 @@ from concurrent.futures import ThreadPoolExecutor
 @st.cache_data(show_spinner=False)
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
-    token = st.secrets["tavily"]["token"]
+    token = st.secrets["tavily"]["api_key"]
     headers = {
          "Authorization": f"Bearer {token}",
          "Content-Type": "application/json"
