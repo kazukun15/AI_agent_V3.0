@@ -237,9 +237,10 @@ def call_gemini_api(prompt: str) -> str:
         st.session_state.gemini_status = f"Gemini API 応答解析エラー: {str(e)}"
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
+# ★ 高精度モデルとして ViT-Large を使用
 @st.cache_resource
 def load_image_classification_model():
-    model_name = "google/vit-base-patch16-224"
+    model_name = "google/vit-large-patch16-224"  # ViT-Large
     extractor = AutoFeatureExtractor.from_pretrained(model_name)
     model = ViTForImageClassification.from_pretrained(model_name)
     model.eval()
@@ -247,22 +248,42 @@ def load_image_classification_model():
 
 extractor, vit_model = load_image_classification_model()
 
+# ★ テスト時拡張（TTA）とアンサンブル手法を導入した画像解析関数
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
+    # RGB変換
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
-    inputs = extractor(pil_image, return_tensors="pt")
-    with torch.no_grad():
-        outputs = vit_model(**inputs)
-    logits = outputs.logits
-    topk = logits.topk(3)
+    
+    # torchvision.transforms を利用して前処理・データ拡張（TTA）
+    from torchvision import transforms as T
+    augmentation_transforms = [
+         T.Compose([]),  # 変換なし（オリジナル）
+         T.Compose([T.RandomHorizontalFlip(p=1.0)]),
+         T.Compose([T.RandomRotation(degrees=15)]),
+         # 必要に応じて他の拡張も追加可能
+    ]
+    
+    all_logits = []
+    for aug in augmentation_transforms:
+         augmented_img = aug(pil_image)
+         inputs = extractor(augmented_img, return_tensors="pt")
+         with torch.no_grad():
+             outputs = vit_model(**inputs)
+         all_logits.append(outputs.logits)
+    
+    # 各拡張画像の logits を平均するアンサンブル
+    avg_logits = sum(all_logits) / len(all_logits)
+    probs = torch.nn.functional.softmax(avg_logits, dim=1)[0]
+    
+    # 上位3件の予測結果
+    topk = avg_logits.topk(3, dim=1)
     top_indices = topk.indices[0].tolist()
-    probs = torch.nn.functional.softmax(logits, dim=1)[0]
     labels = vit_model.config.id2label
     result_str = []
     for idx in top_indices:
-        label_name = labels[idx]
-        confidence = probs[idx].item()
-        result_str.append(f"{label_name} ({confidence*100:.1f}%)")
+         label_name = labels[idx]
+         confidence = probs[idx].item()
+         result_str.append(f"{label_name} ({confidence*100:.1f}%)")
     return ", ".join(result_str)
 
 from concurrent.futures import ThreadPoolExecutor
@@ -310,10 +331,24 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # =============================================================================
+# 6-2. 画像解析結果に基づく会話開始用関数の定義
+# =============================================================================
+def discuss_image_analysis(analysis_text: str, ai_age: int) -> str:
+    """
+    画像解析結果に基づいて、この画像について会話を開始するコメントを生成します。
+    """
+    prompt = (
+        f"以下の画像解析結果に基づいて、この画像について会話を開始してください。\n"
+        f"画像解析結果: {analysis_text}\n\n"
+        f"あなたのコメントのみを出力してください。"
+    )
+    return call_gemini_api(prompt)
+
+# =============================================================================
 # 6. AI応答生成用関数（エージェントクラスなど）
 # =============================================================================
 def adjust_parameters(input_text, ai_age):
-    # 簡易実装。必要に応じて詳細なパラメータ調整ロジックに変更してください。
+    # 簡易実装。必要に応じて詳細なロジックに変更してください。
     return {
        "ゆかり": {"style": "温かく優しい", "detail": "いつも明るい回答をします"},
        "しんや": {"style": "冷静沈着", "detail": "事実に基づいた分析を行います"},
@@ -479,10 +514,11 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
             analysis_text = st.session_state["analyzed_images"][image_hash]
         else:
             pil_img = Image.open(BytesIO(image_bytes))
-            label_text = analyze_image_with_vit(pil_img)
+            label_text = analyze_image_with_vit(pil_img)  # 高精度モデル＋TTA・アンサンブル
             analysis_text = f"{label_text}"
             st.session_state["analyzed_images"][image_hash] = analysis_text
 
+        # 画像解析結果の表示
         st.session_state["messages"].append({"role": "画像解析", "content": analysis_text})
         with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
             st.markdown(
@@ -492,10 +528,9 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
-
-        persona_params = adjust_parameters("image analysis", ai_age)
-        # discuss_image_analysis が未定義のため、ここでは空文字列とする
-        discussion_about_image = ""
+        
+        # 画像解析結果に基づき、会話を自動開始
+        discussion_about_image = discuss_image_analysis(analysis_text, ai_age)
         for line in discussion_about_image.split("\n"):
             line = line.strip()
             if line:
