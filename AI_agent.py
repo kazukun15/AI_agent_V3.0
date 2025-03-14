@@ -86,12 +86,10 @@ st.markdown(
 # =============================================================================
 # 2. ユーザー入力とサイドバー設定
 # =============================================================================
-# ユーザー名とAIの年齢入力（AIの年齢は10歳以上）
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
-# ※ st.text_input は内部で st.session_state["user_name"] に値を保存するため、追加代入は不要です
+# st.text_input は内部で st.session_state["user_name"] に値を保存するため、追加代入は不要です
 
-# サイドバー設定
 st.sidebar.header("カスタム新キャラクター設定")
 custom_new_char_name = st.sidebar.text_input("新キャラクターの名前（未入力ならランダム）", value="", key="custom_new_char_name")
 custom_new_char_personality = st.sidebar.text_area("新キャラクターの性格・特徴（未入力ならランダム）", value="", key="custom_new_char_personality")
@@ -113,6 +111,7 @@ if st.sidebar.button("クイズを開始する", key="quiz_start_button"):
     st.session_state["messages"].append({"role": "クイズ", "content": "クイズ: " + quiz["question"]})
 
 st.sidebar.header("画像解析")
+# アップロードウィジェットのキーは "file_uploader_key"（後でクリア）
 uploaded_image = st.sidebar.file_uploader("画像をアップロードしてください", type=["png", "jpg", "jpeg"], key="file_uploader_key")
 
 use_internet = st.sidebar.checkbox("インターネット検索を使用する", value=True, key="internet_search_checkbox_1")
@@ -121,7 +120,6 @@ st.sidebar.info("※スマホの場合は、画面左上のハンバーガーメ
 # =============================================================================
 # 3. キャラクター定義・セッション初期化
 # =============================================================================
-# キャラクター名の定数（固定メンバー）
 USER_NAME = "user"
 ASSISTANT_NAME = "assistant"
 YUKARI_NAME = "ゆかり"
@@ -130,7 +128,6 @@ MINORU_NAME = "みのる"
 NEW_CHAR_NAME = "新キャラクター"
 NAMES = [YUKARI_NAME, SHINYA_NAME, MINORU_NAME]
 
-# 新キャラクターは一度だけ生成してセッションに保存
 if "new_char" not in st.session_state:
     def generate_new_character():
         if custom_new_char_name.strip() and custom_new_char_personality.strip():
@@ -146,11 +143,9 @@ if "new_char" not in st.session_state:
     st.session_state.new_char = generate_new_character()
 new_name, new_personality = st.session_state.new_char
 
-# APIキー、モデル設定（Gemini API）
 API_KEY = st.secrets["general"]["api_key"]
 MODEL_NAME = "gemini-2.0-flash-001"
 
-# セッション初期化（メッセージ履歴、画像解析キャッシュ、その他）
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 if "analyzed_images" not in st.session_state:
@@ -165,12 +160,11 @@ if "tavily_status" not in st.session_state:
     st.session_state.tavily_status = ""
 if "chat_index" not in st.session_state:
     st.session_state.chat_index = 0
-# 画像アップロードに対する会話生成が既に実施済みかを判定するフラグ
 if "image_conversation_done" not in st.session_state:
     st.session_state.image_conversation_done = False
 
 # =============================================================================
-# 4. アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
+# 4. アイコン画像の読み込み
 # =============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 avatar_dir = os.path.join(BASE_DIR, "avatars")
@@ -240,7 +234,6 @@ def call_gemini_api(prompt: str) -> str:
         st.session_state.gemini_status = f"Gemini API 応答解析エラー: {str(e)}"
         return f"エラー: レスポンス解析に失敗しました -> {str(e)}"
 
-# ★ 高精度モデルとして ViT-Large を使用
 @st.cache_resource
 def load_image_classification_model():
     model_name = "google/vit-large-patch16-224"  # ViT-Large
@@ -251,21 +244,15 @@ def load_image_classification_model():
 
 extractor, vit_model = load_image_classification_model()
 
-# ★ TTA とアンサンブル手法を導入した画像解析関数
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
-    # RGB変換
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
-    
-    # torchvision.transforms を利用して前処理・データ拡張（TTA）
     from torchvision import transforms as T
     augmentation_transforms = [
-         T.Compose([]),  # オリジナル
+         T.Compose([]),
          T.Compose([T.RandomHorizontalFlip(p=1.0)]),
          T.Compose([T.RandomRotation(degrees=15)]),
-         # 必要に応じて他の拡張も追加
     ]
-    
     all_logits = []
     for aug in augmentation_transforms:
          augmented_img = aug(pil_image)
@@ -273,12 +260,8 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
          with torch.no_grad():
              outputs = vit_model(**inputs)
          all_logits.append(outputs.logits)
-    
-    # 各拡張画像の logits を平均（アンサンブル）
     avg_logits = sum(all_logits) / len(all_logits)
     probs = torch.nn.functional.softmax(avg_logits, dim=1)[0]
-    
-    # 上位3件の予測結果
     topk = avg_logits.topk(3, dim=1)
     top_indices = topk.indices[0].tolist()
     labels = vit_model.config.id2label
@@ -295,10 +278,7 @@ from concurrent.futures import ThreadPoolExecutor
 def cached_get_search_info(query: str) -> str:
     url = "https://api.tavily.com/search"
     api_key = st.secrets["tavily"]["api_key"]
-    headers = {
-         "Authorization": f"Bearer {api_key}",
-         "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
          "query": query,
          "topic": "general",
@@ -333,29 +313,19 @@ def async_get_search_info(query: str) -> str:
         future = executor.submit(cached_get_search_info, query)
         return future.result()
 
-# =============================================================================
-# 6-2. 画像解析結果に基づく会話開始用関数（Gemini API を活用）
-# =============================================================================
 def discuss_image_analysis(analysis_text: str, ai_age: int) -> str:
-    """
-    画像解析結果に基づき、Gemini API を利用して詳細な説明・意見を生成する。
-    """
     prompt = (
-        f"以下の画像解析結果に基づいて、この画像について詳しく説明し、感想を述べてください。\n"
-        f"画像解析結果: {analysis_text}\n\n"
+        f"以下の画像解析結果に基づいて、この写真を実際に見たかのように、感想や詳細な説明をしてください。\n"
+        f"解析情報（内部利用のみ）: {analysis_text}\n\n"
         f"あなたの回答のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
-# =============================================================================
-# 6. AI応答生成用関数（エージェントクラスなど）
-# =============================================================================
 def adjust_parameters(input_text, ai_age):
-    # 簡易実装。必要に応じて詳細なロジックに変更してください。
     return {
-       "ゆかり": {"style": "温かく優しい", "detail": "いつも明るい回答をします"},
-       "しんや": {"style": "冷静沈着", "detail": "事実に基づいた分析を行います"},
-       "みのる": {"style": "ユーモアたっぷり", "detail": "軽妙なジョークを交えた回答をします"}
+       "ゆかり": {"style": "温かく優しい", "detail": "実際に写真を見たかのように、感想を述べます"},
+       "しんや": {"style": "冷静沈着", "detail": "写真から感じた現実的な印象を分析します"},
+       "みのる": {"style": "ユーモアたっぷり", "detail": "写真の面白さや細かい所を冗談交じりにコメントします"}
     }
 
 class ChatAgent:
@@ -368,7 +338,7 @@ class ChatAgent:
         current_user = st.session_state.get("user_name", "ユーザー")
         prompt = f"【{current_user}さんの質問】\n{question}\n\n"
         if search_info:
-            prompt += f"最新の情報によると、{search_info}という報告があります。\n"
+            prompt += f"最新情報によると、{search_info}という報告があります。\n"
         prompt += f"このAIは{ai_age}歳として振る舞います。\n"
         prompt += f"{self.name}は【{self.style}な視点】で、{self.detail}。\n"
         prompt += "あなたの回答のみを出力してください。"
@@ -379,7 +349,6 @@ def generate_discussion_parallel(question: str, persona_params: dict, ai_age: in
     agents = []
     for name, params in persona_params.items():
         agents.append(ChatAgent(name, params["style"], params["detail"]))
-    # 新キャラクターも追加
     new_agent = ChatAgent(new_name, new_personality, "")
     agents.append(new_agent)
     responses = {}
@@ -503,42 +472,29 @@ if user_input:
                             f'</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+                time.sleep(random.uniform(3, 10))
 
 # =============================================================================
-# 9. 画像アップロード時の処理：画像解析と会話開始（1回のみ）
+# 9. 画像アップロード時の処理：写真を見た友達の会話開始（1回のみ）
 # =============================================================================
 if not st.session_state.get("quiz_active", False) and uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
-    # 新規画像の場合はフラグをリセット
     if st.session_state.last_uploaded_hash != image_hash:
         st.session_state.last_uploaded_hash = image_hash
         st.session_state.image_conversation_done = False
-    # 画像会話がまだ行われていなければ実施
     if not st.session_state.get("image_conversation_done", False):
+        # 内部で画像解析（解析結果は会話生成用にのみ利用し、表示はしない）
         if image_hash in st.session_state["analyzed_images"]:
             analysis_text = st.session_state["analyzed_images"][image_hash]
         else:
             pil_img = Image.open(BytesIO(image_bytes))
-            label_text = analyze_image_with_vit(pil_img)  # 高精度モデル＋TTA・アンサンブル
-            analysis_text = f"{label_text}"
+            analysis_text = analyze_image_with_vit(pil_img)
             st.session_state["analyzed_images"][image_hash] = analysis_text
 
-        # 画像解析結果の表示
-        st.session_state["messages"].append({"role": "画像解析", "content": analysis_text})
-        with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
-            st.markdown(
-                f'<div style="text-align: left;">'
-                f'<div class="chat-bubble">'
-                f'<div class="chat-header">画像解析</div>{analysis_text}'
-                f'</div></div>',
-                unsafe_allow_html=True,
-            )
-        
-        # 友達全員で画像について意見を出す会話を開始する（1回のみ）
+        # 友達全員が写真を直接見たかのように会話開始する（画像解析結果は表示しない）
         conversation_among_friends = generate_discussion_parallel(
-            question=f"この画像についてどう思いますか？ 画像解析結果: {analysis_text}",
+            question="この写真を見た感想を教えてください。",
             persona_params=adjust_parameters(analysis_text, ai_age),
             ai_age=ai_age,
             search_info=""
@@ -570,39 +526,9 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                         )
                 time.sleep(random.uniform(3, 10))
         
-        # さらに、Gemini API を活用して詳細な補完コメントを取得し、会話に追加
-        detailed_comment = discuss_image_analysis(analysis_text, ai_age)
-        for line in detailed_comment.split("\n"):
-            line = line.strip()
-            if line:
-                parts = line.split(":", 1)
-                role = parts[0]
-                content = parts[1].strip() if len(parts) > 1 else ""
-                st.session_state["messages"].append({"role": role, "content": content})
-                if role == "user":
-                    with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
-                        st.markdown(
-                            f'<div style="text-align: right;">'
-                            f'<div class="chat-bubble">'
-                            f'<div class="chat-header">{user_name}</div>{content}'
-                            f'</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
-                        st.markdown(
-                            f'<div style="text-align: left;">'
-                            f'<div class="chat-bubble">'
-                            f'<div class="chat-header">{role}</div>{content}'
-                            f'</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                time.sleep(random.uniform(3, 10))
-        
-        # 画像アップロード時の会話生成は1回だけ実施する
+        # 画像アップロード時の会話生成は1回のみ実施
         st.session_state.image_conversation_done = True
-        
-        # 画像アップロード処理が終わったら、アップロードウィジェットをクリア（キーの値を None に設定）
+        # アップロード後、ウィジェットの内容をクリア（キーの値を None に設定）
         st.session_state["file_uploader_key"] = None
 
 # =============================================================================
