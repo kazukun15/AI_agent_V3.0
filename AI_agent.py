@@ -165,6 +165,9 @@ if "tavily_status" not in st.session_state:
     st.session_state.tavily_status = ""
 if "chat_index" not in st.session_state:
     st.session_state.chat_index = 0
+# フラグ：画像アップロードに対する会話生成が既に実施済みか
+if "image_conversation_done" not in st.session_state:
+    st.session_state.image_conversation_done = False
 
 # =============================================================================
 # 4. アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
@@ -348,7 +351,7 @@ def discuss_image_analysis(analysis_text: str, ai_age: int) -> str:
 # 6. AI応答生成用関数（エージェントクラスなど）
 # =============================================================================
 def adjust_parameters(input_text, ai_age):
-    # 簡易実装。必要に応じて詳細なパラメータ調整ロジックに変更してください。
+    # 簡易実装。必要に応じて詳細なロジックに変更してください。
     return {
        "ゆかり": {"style": "温かく優しい", "detail": "いつも明るい回答をします"},
        "しんや": {"style": "冷静沈着", "detail": "事実に基づいた分析を行います"},
@@ -503,13 +506,17 @@ if user_input:
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
 
 # =============================================================================
-# 9. 画像アップロード時の処理：画像解析と友達全員での会話開始
+# 9. 画像アップロード時の処理：画像解析と会話開始（1回のみ）
 # =============================================================================
 if not st.session_state.get("quiz_active", False) and uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
     image_hash = hashlib.md5(image_bytes).hexdigest()
+    # 新規画像の場合はフラグをリセット
     if st.session_state.last_uploaded_hash != image_hash:
         st.session_state.last_uploaded_hash = image_hash
+        st.session_state.image_conversation_done = False
+    # 画像会話がまだ行われていなければ実施
+    if not st.session_state.get("image_conversation_done", False):
         if image_hash in st.session_state["analyzed_images"]:
             analysis_text = st.session_state["analyzed_images"][image_hash]
         else:
@@ -529,7 +536,7 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 unsafe_allow_html=True,
             )
         
-        # 友達全員で画像について意見を出す会話を開始する
+        # 友達全員で画像について意見を出す会話を開始する（1回のみ）
         conversation_among_friends = generate_discussion_parallel(
             question=f"この画像についてどう思いますか？ 画像解析結果: {analysis_text}",
             persona_params=adjust_parameters(analysis_text, ai_age),
@@ -543,13 +550,12 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
                 st.session_state["messages"].append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
                 if role == "user":
                     with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
                         st.markdown(
                             f'<div style="text-align: right;">'
                             f'<div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}'
+                            f'<div class="chat-header">{user_name}</div>{content}'
                             f'</div></div>',
                             unsafe_allow_html=True,
                         )
@@ -573,13 +579,12 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 role = parts[0]
                 content = parts[1].strip() if len(parts) > 1 else ""
                 st.session_state["messages"].append({"role": role, "content": content})
-                display_name = user_name if role == "user" else role
                 if role == "user":
                     with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
                         st.markdown(
                             f'<div style="text-align: right;">'
                             f'<div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}'
+                            f'<div class="chat-header">{user_name}</div>{content}'
                             f'</div></div>',
                             unsafe_allow_html=True,
                         )
@@ -593,6 +598,9 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                             unsafe_allow_html=True,
                         )
                 time.sleep(random.uniform(3, 10))
+        
+        # 画像アップロード時の会話生成は1回だけ実施する
+        st.session_state.image_conversation_done = True
 
 # =============================================================================
 # 10. チャット履歴の表示
