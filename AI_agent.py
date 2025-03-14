@@ -89,8 +89,6 @@ st.markdown(
 # ユーザー名とAIの年齢入力（AIの年齢は10歳以上）
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
-# ユーザー名をセッションに保存（ChatAgentで利用）
-st.session_state["user_name"] = user_name
 
 # サイドバー設定
 st.sidebar.header("カスタム新キャラクター設定")
