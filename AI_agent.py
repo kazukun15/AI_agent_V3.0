@@ -165,7 +165,7 @@ if "tavily_status" not in st.session_state:
     st.session_state.tavily_status = ""
 if "chat_index" not in st.session_state:
     st.session_state.chat_index = 0
-# フラグ：画像アップロードに対する会話生成が既に実施済みか
+# 画像アップロードに対する会話生成が既に実施済みかを判定するフラグ
 if "image_conversation_done" not in st.session_state:
     st.session_state.image_conversation_done = False
 
@@ -601,6 +601,9 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
         
         # 画像アップロード時の会話生成は1回だけ実施する
         st.session_state.image_conversation_done = True
+        
+        # 画像アップロード処理が終わったら、アップロードウィジェットをクリア（キーの値を None に設定）
+        st.session_state["file_uploader_key"] = None
 
 # =============================================================================
 # 10. チャット履歴の表示
@@ -636,3 +639,4 @@ else:
 st.sidebar.header("APIステータス")
 st.sidebar.write("【Gemini API】", st.session_state.gemini_status)
 st.sidebar.write("【tavily API】", st.session_state.tavily_status)
+st.sidebar.success("OK")
