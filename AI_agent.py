@@ -89,6 +89,8 @@ st.markdown(
 # ユーザー名とAIの年齢入力（AIの年齢は10歳以上）
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
+# ユーザー名をセッションに保存（ChatAgentで利用）
+st.session_state["user_name"] = user_name
 
 # サイドバー設定
 st.sidebar.header("カスタム新キャラクター設定")
@@ -162,6 +164,9 @@ if "gemini_status" not in st.session_state:
     st.session_state.gemini_status = ""
 if "tavily_status" not in st.session_state:
     st.session_state.tavily_status = ""
+# チャットメッセージ用の一意キー生成用カウンター
+if "chat_index" not in st.session_state:
+    st.session_state.chat_index = 0
 
 # =============================================================================
 # 4. アイコン画像の読み込み（同じディレクトリの avatars フォルダを参照）
@@ -307,8 +312,16 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # =============================================================================
-# 6. エージェントクラスと並列応答生成
+# 6. AI応答生成用関数（エージェントクラスなど）
 # =============================================================================
+# adjust_parameters の簡易実装（必要に応じて内容を拡充してください）
+def adjust_parameters(input_text, ai_age):
+    return {
+       "ゆかり": {"style": "温かく優しい", "detail": "いつも明るい回答をします"},
+       "しんや": {"style": "冷静沈着", "detail": "事実に基づいた分析を行います"},
+       "みのる": {"style": "ユーモアたっぷり", "detail": "軽妙なジョークを交えた回答をします"}
+    }
+
 class ChatAgent:
     def __init__(self, name, style, detail):
         self.name = name
@@ -364,18 +377,18 @@ for msg in st.session_state["messages"]:
     role = msg["role"]
     content = msg["content"]
     display_name = user_name if role == "user" else role
+    key = f"chat_message_{st.session_state.chat_index}"
+    st.session_state.chat_index += 1
     if role == "user":
-        with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+        with st.chat_message(role, key=key, avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble">'
-                f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                 unsafe_allow_html=True,
             )
     else:
-        with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+        with st.chat_message(role, key=key, avatar=avatar_img_dict.get(role, "🤖")):
             st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble">'
-                f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -393,18 +406,20 @@ if user_input:
         else:
             quiz_result = f"残念、不正解です。正解は {st.session_state.quiz_answer} です。"
         st.session_state["messages"].append({"role": "クイズ", "content": quiz_result})
-        with st.chat_message("クイズ", avatar=avatar_img_dict.get("クイズ", "❓")):
+        key = f"chat_message_{st.session_state.chat_index}"
+        st.session_state.chat_index += 1
+        with st.chat_message("クイズ", key=key, avatar=avatar_img_dict.get("クイズ", "❓")):
             st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble">'
-                f'<div class="chat-header">クイズ</div>{quiz_result}</div></div>',
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">クイズ</div>{quiz_result}</div></div>',
                 unsafe_allow_html=True,
             )
         st.session_state.quiz_active = False
     else:
-        with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+        key = f"chat_message_{st.session_state.chat_index}"
+        st.session_state.chat_index += 1
+        with st.chat_message("user", key=key, avatar=avatar_img_dict.get(USER_NAME)):
             st.markdown(
-                f'<div style="text-align: right;"><div class="chat-bubble">'
-                f'<div class="chat-header">{user_name}</div>{user_input}</div></div>',
+                f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{user_name}</div>{user_input}</div></div>',
                 unsafe_allow_html=True,
             )
         st.session_state["messages"].append({"role": "user", "content": user_input})
@@ -428,18 +443,18 @@ if user_input:
                 content = parts[1].strip() if len(parts) > 1 else ""
                 st.session_state["messages"].append({"role": role, "content": content})
                 display_name = user_name if role == "user" else role
+                key = f"chat_message_{st.session_state.chat_index}"
+                st.session_state.chat_index += 1
                 if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                    with st.chat_message(role, key=key, avatar=avatar_img_dict.get(USER_NAME)):
                         st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
                 else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                    with st.chat_message(role, key=key, avatar=avatar_img_dict.get(role, "🤖")):
                         st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
@@ -452,19 +467,20 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
     image_hash = hashlib.md5(image_bytes).hexdigest()
     if st.session_state.last_uploaded_hash != image_hash:
         st.session_state.last_uploaded_hash = image_hash
-        if image_hash in st.session_state.analyzed_images:
-            analysis_text = st.session_state.analyzed_images[image_hash]
+        if image_hash in st.session_state["analyzed_images"]:
+            analysis_text = st.session_state["analyzed_images"][image_hash]
         else:
             pil_img = Image.open(BytesIO(image_bytes))
             label_text = analyze_image_with_vit(pil_img)  # ViTで解析
             analysis_text = f"{label_text}"
-            st.session_state.analyzed_images[image_hash] = analysis_text
+            st.session_state["analyzed_images"][image_hash] = analysis_text
 
         st.session_state["messages"].append({"role": "画像解析", "content": analysis_text})
-        with st.chat_message("画像解析", avatar=avatar_img_dict.get("画像解析", "🖼️")):
+        key = f"chat_message_{st.session_state.chat_index}"
+        st.session_state.chat_index += 1
+        with st.chat_message("画像解析", key=key, avatar=avatar_img_dict.get("画像解析", "🖼️")):
             st.markdown(
-                f'<div style="text-align: left;"><div class="chat-bubble">'
-                f'<div class="chat-header">画像解析</div>{analysis_text}</div></div>',
+                f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">画像解析</div>{analysis_text}</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -479,18 +495,18 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 content = parts[1].strip() if len(parts) > 1 else ""
                 st.session_state["messages"].append({"role": role, "content": content})
                 display_name = user_name if role == "user" else role
+                key = f"chat_message_{st.session_state.chat_index}"
+                st.session_state.chat_index += 1
                 if role == "user":
-                    with st.chat_message(role, avatar=avatar_img_dict.get(USER_NAME)):
+                    with st.chat_message(role, key=key, avatar=avatar_img_dict.get(USER_NAME)):
                         st.markdown(
-                            f'<div style="text-align: right;"><div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                            f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
                 else:
-                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                    with st.chat_message(role, key=key, avatar=avatar_img_dict.get(role, "🤖")):
                         st.markdown(
-                            f'<div style="text-align: left;"><div class="chat-bubble">'
-                            f'<div class="chat-header">{display_name}</div>{content}</div></div>',
+                            f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{content}</div></div>',
                             unsafe_allow_html=True,
                         )
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
@@ -502,18 +518,18 @@ st.header("会話履歴")
 if st.session_state["messages"]:
     for msg in reversed(st.session_state["messages"]):
         display_name = user_name if msg["role"] == "user" else msg["role"]
+        key = f"chat_message_{st.session_state.chat_index}"
+        st.session_state.chat_index += 1
         if msg["role"] == "user":
-            with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+            with st.chat_message("user", key=key, avatar=avatar_img_dict.get(USER_NAME)):
                 st.markdown(
-                    f'<div style="text-align: right;"><div class="chat-bubble">'
-                    f'<div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    f'<div style="text-align: right;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
                     unsafe_allow_html=True,
                 )
         else:
-            with st.chat_message(msg["role"], avatar=avatar_img_dict.get(msg["role"], "🤖")):
+            with st.chat_message(msg["role"], key=key, avatar=avatar_img_dict.get(msg["role"], "🤖")):
                 st.markdown(
-                    f'<div style="text-align: left;"><div class="chat-bubble">'
-                    f'<div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
+                    f'<div style="text-align: left;"><div class="chat-bubble"><div class="chat-header">{display_name}</div>{msg["content"]}</div></div>',
                     unsafe_allow_html=True,
                 )
 else:
