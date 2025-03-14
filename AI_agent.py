@@ -89,7 +89,7 @@ st.markdown(
 # ユーザー名とAIの年齢入力（AIの年齢は10歳以上）
 user_name = st.text_input("あなたの名前を入力してください", value="ユーザー", key="user_name")
 ai_age = st.number_input("AIの年齢を指定してください", min_value=10, value=30, step=1, key="ai_age")
-# ※ st.text_input は内部で st.session_state["user_name"] に値を保存するため、改めて代入する必要はありません
+# ※ st.text_input は内部で st.session_state["user_name"] に値を保存するため、追加代入は不要です
 
 # サイドバー設定
 st.sidebar.header("カスタム新キャラクター設定")
@@ -248,7 +248,7 @@ def load_image_classification_model():
 
 extractor, vit_model = load_image_classification_model()
 
-# ★ テスト時拡張（TTA）とアンサンブル手法を導入した画像解析関数
+# ★ TTA とアンサンブル手法を導入した画像解析関数
 def analyze_image_with_vit(pil_image: Image.Image) -> str:
     # RGB変換
     if pil_image.mode != "RGB":
@@ -257,10 +257,10 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
     # torchvision.transforms を利用して前処理・データ拡張（TTA）
     from torchvision import transforms as T
     augmentation_transforms = [
-         T.Compose([]),  # 変換なし（オリジナル）
+         T.Compose([]),  # オリジナル
          T.Compose([T.RandomHorizontalFlip(p=1.0)]),
          T.Compose([T.RandomRotation(degrees=15)]),
-         # 必要に応じて他の拡張も追加可能
+         # 必要に応じて他の拡張も追加
     ]
     
     all_logits = []
@@ -271,7 +271,7 @@ def analyze_image_with_vit(pil_image: Image.Image) -> str:
              outputs = vit_model(**inputs)
          all_logits.append(outputs.logits)
     
-    # 各拡張画像の logits を平均するアンサンブル
+    # 各拡張画像の logits を平均（アンサンブル）
     avg_logits = sum(all_logits) / len(all_logits)
     probs = torch.nn.functional.softmax(avg_logits, dim=1)[0]
     
@@ -331,16 +331,16 @@ def async_get_search_info(query: str) -> str:
         return future.result()
 
 # =============================================================================
-# 6-2. 画像解析結果に基づく会話開始用関数の定義
+# 6-2. 画像解析結果に基づく会話開始用関数（Gemini API を活用）
 # =============================================================================
 def discuss_image_analysis(analysis_text: str, ai_age: int) -> str:
     """
-    画像解析結果に基づいて、この画像について会話を開始するコメントを生成します。
+    画像解析結果に基づき、Gemini API を利用して詳細な説明・意見を生成する。
     """
     prompt = (
-        f"以下の画像解析結果に基づいて、この画像について会話を開始してください。\n"
+        f"以下の画像解析結果に基づいて、この画像について詳しく説明し、感想を述べてください。\n"
         f"画像解析結果: {analysis_text}\n\n"
-        f"あなたのコメントのみを出力してください。"
+        f"あなたの回答のみを出力してください。"
     )
     return call_gemini_api(prompt)
 
@@ -348,7 +348,7 @@ def discuss_image_analysis(analysis_text: str, ai_age: int) -> str:
 # 6. AI応答生成用関数（エージェントクラスなど）
 # =============================================================================
 def adjust_parameters(input_text, ai_age):
-    # 簡易実装。必要に応じて詳細なロジックに変更してください。
+    # 簡易実装。必要に応じて詳細なパラメータ調整ロジックに変更してください。
     return {
        "ゆかり": {"style": "温かく優しい", "detail": "いつも明るい回答をします"},
        "しんや": {"style": "冷静沈着", "detail": "事実に基づいた分析を行います"},
@@ -376,6 +376,7 @@ def generate_discussion_parallel(question: str, persona_params: dict, ai_age: in
     agents = []
     for name, params in persona_params.items():
         agents.append(ChatAgent(name, params["style"], params["detail"]))
+    # 新キャラクターも追加
     new_agent = ChatAgent(new_name, new_personality, "")
     agents.append(new_agent)
     responses = {}
@@ -434,7 +435,6 @@ for msg in st.session_state["messages"]:
 # =============================================================================
 user_input = st.chat_input("何か質問や話したいことがありますか？")
 if user_input:
-    # インターネット検索利用（チェックボックスの値 use_internet を利用）
     search_info = async_get_search_info(user_input) if use_internet else ""
     
     if st.session_state.get("quiz_active", False):
@@ -503,7 +503,7 @@ if user_input:
                 time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
 
 # =============================================================================
-# 9. 画像アップロードがあれば、かつ新しい画像の場合のみ解析し会話開始
+# 9. 画像アップロード時の処理：画像解析と友達全員での会話開始
 # =============================================================================
 if not st.session_state.get("quiz_active", False) and uploaded_image is not None:
     image_bytes = uploaded_image.getvalue()
@@ -529,9 +529,14 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                 unsafe_allow_html=True,
             )
         
-        # 画像解析結果に基づき、会話を自動開始
-        discussion_about_image = discuss_image_analysis(analysis_text, ai_age)
-        for line in discussion_about_image.split("\n"):
+        # 友達全員で画像について意見を出す会話を開始する
+        conversation_among_friends = generate_discussion_parallel(
+            question=f"この画像についてどう思いますか？ 画像解析結果: {analysis_text}",
+            persona_params=adjust_parameters(analysis_text, ai_age),
+            ai_age=ai_age,
+            search_info=""
+        )
+        for line in conversation_among_friends.split("\n"):
             line = line.strip()
             if line:
                 parts = line.split(":", 1)
@@ -553,11 +558,41 @@ if not st.session_state.get("quiz_active", False) and uploaded_image is not None
                         st.markdown(
                             f'<div style="text-align: left;">'
                             f'<div class="chat-bubble">'
+                            f'<div class="chat-header">{role}</div>{content}'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                time.sleep(random.uniform(3, 10))
+        
+        # さらに、Gemini API を活用して詳細な補完コメントを取得し、会話に追加
+        detailed_comment = discuss_image_analysis(analysis_text, ai_age)
+        for line in detailed_comment.split("\n"):
+            line = line.strip()
+            if line:
+                parts = line.split(":", 1)
+                role = parts[0]
+                content = parts[1].strip() if len(parts) > 1 else ""
+                st.session_state["messages"].append({"role": role, "content": content})
+                display_name = user_name if role == "user" else role
+                if role == "user":
+                    with st.chat_message("user", avatar=avatar_img_dict.get(USER_NAME)):
+                        st.markdown(
+                            f'<div style="text-align: right;">'
+                            f'<div class="chat-bubble">'
                             f'<div class="chat-header">{display_name}</div>{content}'
                             f'</div></div>',
                             unsafe_allow_html=True,
                         )
-                time.sleep(random.uniform(3, 10))  # ランダムな遅延（3～10秒）
+                else:
+                    with st.chat_message(role, avatar=avatar_img_dict.get(role, "🤖")):
+                        st.markdown(
+                            f'<div style="text-align: left;">'
+                            f'<div class="chat-bubble">'
+                            f'<div class="chat-header">{role}</div>{content}'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                time.sleep(random.uniform(3, 10))
 
 # =============================================================================
 # 10. チャット履歴の表示
